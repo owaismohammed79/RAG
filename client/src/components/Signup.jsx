@@ -101,8 +101,13 @@ function Signup({variable}) {
             <div className='text-sm text-gray-300 flex flex-col w-full items-center justify-center my-1'>
               <span className='text-white font-bold text-2xl'>{variable}</span>
               <div>
-                <span>want to </span>
-                {variable === "Sign up" ? (<Link to="/login" className='underline'>log In?</Link>) : (<Link to="/signup" className='underline'>sign up?</Link>)}
+                {variable === "Sign up" ? (
+                  <p>Already have an account?&nbsp;
+                    <Link to="/login" className='underline'>Log In?</Link>
+                  </p>) : 
+                  (<p>Don't have an account?&nbsp;
+                    <Link to="/signup" className='underline'>Sign up?</Link>
+                  </p>)}
               </div>
             </div>
             <Button className="w-full bg-white text-black hover:bg-white/80 border-hidden" onClick={() => handleGoogleLogin()}>
