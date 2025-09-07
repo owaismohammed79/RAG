@@ -95,9 +95,9 @@ function Signup({variable}) {
           <Logo className={`w-40`} textSize={`4xl`}/>
           <p className='py-1'>(Rapid Answer Generator)</p>
         </div>
-        <h1 className='text-4xl py-1 font-bold'>Be More Productive</h1>
-        <Card className='bg-[#0A363CB2] border-[#104f59] px-6 py-2 relative group hover:bg-[#0A363CB2]/100 transition-colors overflow-hidden w-1/3 max-w-96'>  
-          <CardContent className='flex flex-col justify-between items-center gap-2 px-6 py-2'>
+        <h1 className='text-3xl sm:text-4xl py-1 font-bold text-center'>Be More Productive</h1>
+        <Card className='bg-[#0A363CB2] border-[#104f59] px-4 sm:px-6 py-2 relative group hover:bg-[#0A363CB2]/100 transition-colors overflow-hidden w-full max-w-md sm:w-3/4 md:w-1/2 lg:w-1/3'>  
+          <CardContent className='flex flex-col justify-between items-center gap-2 px-2 sm:px-6 py-2'>
             <div className='text-sm text-gray-300 flex flex-col w-full items-center justify-center my-1'>
               <span className='text-white font-bold text-2xl'>{variable}</span>
               <div>
@@ -141,7 +141,7 @@ function Signup({variable}) {
               {errors.password && <span className='text-red-500'>{errors.password.message}</span>}
               <Button className='bg-[#13E3FF] w-full text-black hover:bg-[#13E3FF]/70' type="submit">{variable}</Button>
             </form>
-            <div className='text-white text-center'>By continuing, you agree to RAG&apos;s Consumer Terms and Usage Policy, and acknowledge their Privacy Policy</div>
+            <div className='text-white text-center text-xs'>By continuing, you agree to RAG&apos;s Consumer Terms and Usage Policy, and acknowledge their Privacy Policy</div>
           </CardContent>
         </Card>
       </div>
