@@ -7,13 +7,13 @@ export class AuthService{
 
     constructor(){
     this.client
-        .setEndpoint('https://fra.cloud.appwrite.io/v1')
+        .setEndpoint(conf.appwriteUrl)
         .setProject(conf.appwriteProjectId);
     this.account = new Account(this.client);
     }
 
     async googleLogin(){
-        await this.account.createOAuth2Session(OAuthProvider.Google, 'http://localhost:5173/chat', 'http://localhost:5173/fail')
+        await this.account.createOAuth2Session(OAuthProvider.Google, `${conf.BaseUrl}/chat`, `${conf.BaseUrl}/fail`)
     }
 
     async getJWT() {
