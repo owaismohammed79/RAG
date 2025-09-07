@@ -1,12 +1,12 @@
 Flask
+Flask-Cors
+gunicorn
+gevent
 langchain
 langchain-community
 langchain-google-genai
 langchain-chroma
+google-generativeai
 pypdf
 python-dotenv
-unstructured
-google-generativeai
 appwrite
-flask_cors
-gunicorn
