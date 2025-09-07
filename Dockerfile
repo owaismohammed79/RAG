@@ -4,6 +4,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     ghostscript \
+    poppler-utils \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
