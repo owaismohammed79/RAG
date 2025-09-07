@@ -13,6 +13,7 @@ import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import authService from '../appwrite(service)/auth'
 import { addMessage, setConversationId, fetchConversations } from '../redux/convoSlice'
 import ConversationHistory from './ConversationHistory'
+import { conf } from '../config/conf'
 
 const SidebarContent = ({ jwt }) => <ConversationHistory jwt={jwt} />;
 
@@ -131,7 +132,7 @@ export default function ChatInterface() {
     setFiles([]); //clear files after submission
 
     try {
-      const res = await fetch('http://localhost:5000/api/prompt/text-file', {
+      const res = await fetch(`${conf.BaseUrl}/api/prompt/text-file`, {
         method: "POST",
         body: formData,
         headers: { 'Authorization': `Bearer ${jwt}` }

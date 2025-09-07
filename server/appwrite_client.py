@@ -9,7 +9,7 @@ load_dotenv()
 class dbService:
     def __init__(self, session, jwt):
         self.client = Client()
-        self.client.set_endpoint('https://Frankfurt.cloud.appwrite.io/v1')
+        self.client.set_endpoint(os.getenv('VITE_APPWRITE_ENDPOINT'))
         self.client.set_session(session)
         self.client.set_project(os.getenv("APPWRITE_PROJECT_ID"))
         self.client.set_key(os.getenv("APPWRITE_API_KEY"))
