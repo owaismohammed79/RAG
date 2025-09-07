@@ -1,0 +1,10 @@
+flask
+flask-cors
+google-generativeai
+langchain-chroma
+langchain-google-genai
+pypdf
+python-dotenv
+appwrite-server-sdk
+langchain
+unstructured

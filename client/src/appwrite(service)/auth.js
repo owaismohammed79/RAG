@@ -16,6 +16,16 @@ export class AuthService{
         await this.account.createOAuth2Session(OAuthProvider.Google, 'http://localhost:5173/chat', 'http://localhost:5173/fail')
     }
 
+    async getJWT() {
+        try {
+            const jwt = await this.account.createJWT();
+            return jwt;
+        } catch (error) {
+            console.log(`Appwrite error in getting JWT: ${error}`);
+            throw error;
+        }
+    }
+
     async getCurrentUser() {
         try {
             const user = await this.account.getSession('current');

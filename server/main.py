@@ -223,22 +223,32 @@ def clear_database():
             print(f"Failed to delete Chroma database: {e}")
 
 
-def user_input(user_question, context_documents):
-    # Combine the context documents into a single string
+def user_input(user_question, context_documents, history):
     context = "\n\n".join([doc.page_content for doc in context_documents])
     
-    # Create the prompt
+    history_str = ""
+    for message in history:
+        role = "User" if message.get('type') == 'user' else "Assistant"
+        history_str += f"{role}: {message.get('content')}\n"
+
     prompt = f"""
     You are an expert RAG assistant that answers questions based on the provided documents and previous conversation. Provide a detailed answer to the question based on the following context.
     If the answer is not in the provided context, just say, "Answer is not available in the context".
-    Don't provide the wrong answer.\n\n
-    Context:\n{context}\n
-    Question:\n{user_question}\n
+    Don't provide the wrong answer.
+
+    Previous conversation:
+    {history_str}
+    
+    Context from documents:
+    {context}
+    
+    Question:
+    {user_question}
 
     Answer:
     """
     
-    response = client.models.generate_content(model = "gemini-2.0-flash-001", contents =prompt)
+    response = client.models.generate_content(model = "gemini-1.5-flash", contents =prompt)
     return response.text
 
 def main():
@@ -249,18 +259,18 @@ def main():
 
     documents = load_documents()
 
-    # If no documents are found, handle it by directly querying Gemini
+    #if no documents are found, handle it by using Gemini
     if not documents:
         print("No PDFs found, using Gemini Pro for direct answers.")
 
         user_question = input("Ask a question (without PDF context): ")
 
         if user_question:
-            response = client.models.generate_content(model = "gemini-2.0-flash", contents =user_question)
+            response = client.models.generate_content(model = "gemini-1.5-flash", contents =user_question)
 
             print(response.text) 
     else:
-        # Documents exist, proceed with processing
+        #documents exist
         chunks = split_documents(documents)
         get_vector_store(chunks)
         print("PDFs loaded and processed.")
@@ -273,5 +283,5 @@ def main():
             docs = new_db.similarity_search_with_score(user_question, k=15)
             
             context_documents = [doc[0] for doc in docs]
-            res = user_input(user_question, context_documents)
+            res = user_input(user_question, context_documents, [])
             print(res)

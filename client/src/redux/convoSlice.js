@@ -1,60 +1,134 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { conf } from "../config/conf";
 
 const initialState = {
     status: 'idle',
-    conversations: [
-        {
-            title: "User's query related to chat GPT?",
-            messages: [
-                {
-                    sender: "username",
-                    msg: "What is chat GPT?"
-                },
-                {
-                    sender: "bot",
-                    msg: "yada yada"
-                }
-            ]
-        },{}
-    ], //The issue here is how would I identify individual chats otherwise I might have to search the whole array of array of objects and then have to go through that array of messages for the particular conversation, help me out
+    conversations: [],
+    activeConversationId: null,
+    messages: [],
     error: null
-} 
+}
 
-const fetchConvoByUserId = createAsyncThunk(
-    "conversation/fetchConvoByUserId", async(userId, {rejectWithValue}) => {
+export const fetchConversations = createAsyncThunk(
+    "conversation/fetchConversations",
+    async (jwt, { rejectWithValue }) => {
         try {
-            await fetch(`https://baigan.com/${userId}`).then((response) => {
-                return response.data
-            })
+            const response = await fetch(`${conf.BaseUrl}/api/conversations`, {
+                headers: { 'Authorization': `Bearer ${jwt}` }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch conversations');
+            }
+            const data = await response.json();
+            return data;
         } catch (error) {
-            console.log(`Error in loading conversations: ${error}`)
-            return rejectWithValue(error.message || error.response.data) //This is used to send this thunk to the rejected action, so there are 3 states for this thunk, pending, fulfilled, rejected. This is usefull if you want to show the complete error details in the UI using the state's error, like if you simply throw the error, then the state has the whole error object, but in the rejectWithValue you can send only the required details from the error object
+            return rejectWithValue(error.message);
         }
-})
+    }
+);
+
+export const fetchMessages = createAsyncThunk(
+    "conversation/fetchMessages",
+    async ({ conversationId, jwt }, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${conf.BaseUrl}/api/conversations/${conversationId}`, {
+                headers: { 'Authorization': `Bearer ${jwt}` }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch messages');
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
+    }
+);
+
+export const deleteConversation = createAsyncThunk(
+    "conversation/deleteConversation",
+    async ({ conversationId, jwt }, { rejectWithValue, dispatch }) => {
+        try {
+            const response = await fetch(`${conf.BaseUrl}/api/conversations/${conversationId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${jwt}` }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to delete conversation');
+            }
+            // After successful deletion, re-fetch conversations to update the sidebar
+            dispatch(fetchConversations(jwt));
+            return conversationId;
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
+    }
+);
 
 const convoSlice = createSlice({
     name: "conversation",
     initialState,
     reducers: {
-        loadConvo: (state, action) => {
-
+        setActiveConversation: (state, action) => {
+            state.activeConversationId = action.payload;
+            state.messages = []; //Remember to clear messages when switching conversations
+        },
+        addMessage: (state, action) => {
+            state.messages.push(action.payload);
+        },
+        setConversationId: (state, action) => {
+            state.activeConversationId = action.payload;
+        },
+        startNewChat: (state) => {
+            state.activeConversationId = null;
+            state.messages = [];
         }
     },
     extraReducers: (builder) => {
         builder
-            .addCase(fetchConvoByUserId.pending, (state) => {
-                state.status = 'loading'
-            }) 
-            .addCase(fetchConvoByUserId.fulfilled, (state, action) => {
-                state.status = 'succeeded'
-                state.conversations = action.payload
+            .addCase(fetchConversations.pending, (state) => {
+                state.status = 'loading';
             })
-            .addCase(fetchConvoByUserId.rejected, (state, action) => {
+            .addCase(fetchConversations.fulfilled, (state, action) => {
+                state.status = 'succeeded';
+                state.conversations = action.payload;
+            })
+            .addCase(fetchConversations.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload
+                state.error = action.payload;
             })
+            .addCase(fetchMessages.pending, (state) => {
+                state.status = 'loading';
+            })
+            .addCase(fetchMessages.fulfilled, (state, action) => {
+                state.status = 'succeeded';
+                state.messages = action.payload.map(msg => ({
+                    type: msg.senderType,
+                    content: msg.content
+                }));
+            })
+            .addCase(fetchMessages.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload;
+            })
+            .addCase(deleteConversation.fulfilled, (state, action) => {
+                state.status = 'succeeded';
+                //remove the deleted conversation from the state
+                state.conversations = state.conversations.filter(
+                    (convo) => convo.$id !== action.payload
+                );
+                //if the active conversation was deleted, clear it
+                if (state.activeConversationId === action.payload) {
+                    state.activeConversationId = null;
+                    state.messages = [];
+                }
+            })
+            .addCase(deleteConversation.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload;
+            });
     }
 })
- 
-export const {loadConvo} = convoSlice.actions //Object destructuring of the actions object and take out only loadConvo
-export default convoSlice.reducer;//This is for the store to say that this slice reducer can edit slice states in you
+
+export const { setActiveConversation, addMessage, setConversationId, startNewChat } = convoSlice.actions;
+export default convoSlice.reducer;
