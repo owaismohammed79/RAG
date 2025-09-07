@@ -5,5 +5,5 @@ export const conf = {
     appwriteCollectionId: String(import.meta.env.VITE_APPWRITE_COLLECTION_ID),
     googleoAuthClientId: String(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID),
     emailAddress: String(import.meta.env.VITE_EMAIL_ADDRESS),
-    BaseUrl: String(import.meta.env.BASE_URL)
+    BaseUrl: String(import.meta.env.VITE_BASE_URL)
 }
