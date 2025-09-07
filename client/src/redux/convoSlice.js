@@ -13,7 +13,7 @@ export const fetchConversations = createAsyncThunk(
     "conversation/fetchConversations",
     async (jwt, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${conf.BaseUrl}/api/conversations`, {
+            const response = await fetch(`${conf.BackendURL}/api/conversations`, {
                 headers: { 'Authorization': `Bearer ${jwt}` }
             });
             if (!response.ok) {
@@ -31,7 +31,7 @@ export const fetchMessages = createAsyncThunk(
     "conversation/fetchMessages",
     async ({ conversationId, jwt }, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${conf.BaseUrl}/api/conversations/${conversationId}`, {
+            const response = await fetch(`${conf.BackendURL}/api/conversations/${conversationId}`, {
                 headers: { 'Authorization': `Bearer ${jwt}` }
             });
             if (!response.ok) {
@@ -49,7 +49,7 @@ export const deleteConversation = createAsyncThunk(
     "conversation/deleteConversation",
     async ({ conversationId, jwt }, { rejectWithValue, dispatch }) => {
         try {
-            const response = await fetch(`${conf.BaseUrl}/api/conversations/${conversationId}`, {
+            const response = await fetch(`${conf.BackendURL}/api/conversations/${conversationId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${jwt}` }
             });

@@ -2,8 +2,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredPDFLoader
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+from google.generativeai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
 from langchain.schema.document import Document 
@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CHROMA_PATH="chroma"
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"), http_options=types.HttpOptions(api_version='v1'))
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 data_path = r"data"
 #data_path=r"no_data"
 
@@ -248,7 +248,8 @@ def user_input(user_question, context_documents, history):
     Answer:
     """
     
-    response = client.models.generate_content(model = "gemini-1.5-flash", contents =prompt)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
     return response.text
 
 def main():
@@ -259,18 +260,18 @@ def main():
 
     documents = load_documents()
 
-    #if no documents are found, handle it by using Gemini
+    # If no documents are found, handle it by directly querying Gemini
     if not documents:
         print("No PDFs found, using Gemini Pro for direct answers.")
 
         user_question = input("Ask a question (without PDF context): ")
 
         if user_question:
-            response = client.models.generate_content(model = "gemini-1.5-flash", contents =user_question)
-
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(user_question)
             print(response.text) 
     else:
-        #documents exist
+        # Documents exist, proceed with processing
         chunks = split_documents(documents)
         get_vector_store(chunks)
         print("PDFs loaded and processed.")

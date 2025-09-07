@@ -132,7 +132,7 @@ export default function ChatInterface() {
     setFiles([]); //clear files after submission
 
     try {
-      const res = await fetch(`${conf.BaseUrl}/api/prompt/text-file`, {
+      const res = await fetch(`${conf.BackendURL}/api/prompt/text-file`, {
         method: "POST",
         body: formData,
         headers: { 'Authorization': `Bearer ${jwt}` }
