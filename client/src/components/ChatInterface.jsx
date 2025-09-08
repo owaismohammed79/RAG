@@ -34,6 +34,30 @@ export default function ChatInterface() {
   const micRef = useRef(null);
   const [recognition, setRecognition] = useState(null);
   const [browserSupport, setBrowserSupport] = useState({ supported: true, message: '' });
+  const [promptsRemaining, setPromptsRemaining] = useState(null);
+  const [maxPrompts, setMaxPrompts] = useState(10);
+  const isSendDisabled = isLoading || (promptsRemaining !== null && promptsRemaining <= 0);
+
+  useEffect(() => {
+    const fetchPromptLimit = async () => {
+      if (!jwt) return;
+      try {
+        const response = await fetch(`${conf.BackendURL}/api/user/prompt-limit`, {
+          headers: { 'Authorization': `Bearer ${jwt}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setPromptsRemaining(data.promptsRemaining);
+          setMaxPrompts(data.maxPrompts);
+        } else {
+          console.error("Failed to fetch prompt limit:", await response.json());
+        }
+      } catch (error) {
+        console.error("Error fetching prompt limit:", error);
+      }
+    };
+    fetchPromptLimit();
+  }, [jwt]);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -114,6 +138,10 @@ export default function ChatInterface() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (input.trim() === '' || !jwt) return;
+    if (promptsRemaining !== null && promptsRemaining <= 0) {
+      dispatch(addMessage({ type: 'bot', content: `You have reached your daily prompt limit of ${maxPrompts}. Please try again tomorrow.` }));
+      return;
+    }
 
     setIsLoading(true);
     const userMessage = { type: 'user', content: input };
@@ -144,8 +172,14 @@ export default function ChatInterface() {
           dispatch(setConversationId(data.conversationId));
           dispatch(fetchConversations(jwt)); 
         }
+        setPromptsRemaining(data.promptsRemaining);
       } else {
-        throw new Error(data.error || 'API request failed');
+        if (res.status === 429) {
+          dispatch(addMessage({ type: 'bot', content: data.error }));
+          setPromptsRemaining(0);
+        } else {
+          throw new Error(data.error || 'API request failed');
+        }
       }
     } catch (error) {
       console.error('Error fetching response:', error);
@@ -221,6 +255,15 @@ export default function ChatInterface() {
         </main>
 
         <div className="p-4 border-t border-cyan-950">
+          {promptsRemaining !== null && (
+            <div className="text-center text-sm text-gray-400 mb-2">
+              {promptsRemaining <= 0 ? (
+                <span className="text-red-400">Daily prompt limit reached.</span>
+              ) : (
+                <span>{promptsRemaining} of {maxPrompts} prompts remaining today.</span>
+              )}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="flex items-center gap-2 bg-black/30 rounded-full p-2 max-w-[900px] mx-auto">
             <Button
               type="button"
@@ -228,7 +271,7 @@ export default function ChatInterface() {
               size="icon"
               onClick={handleMicClick}
               className={`rounded-full ${isListening ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`}
-              disabled={!browserSupport.supported}
+              disabled={!browserSupport.supported || isSendDisabled}
             >
               <Mic className="w-6 h-6" ref={micRef} />
             </Button>
@@ -238,13 +281,14 @@ export default function ChatInterface() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Message Or Talk With RAG"
               className="flex-1 bg-transparent border-none focus:outline-none text-gray-300"
+              disabled={isSendDisabled}
             />
-            <Button type="button" variant="ghost" size="icon" className="text-cyan-400 rounded-full" title="Upload PDF files" onClick={() => fileInputRef.current.click()}>
+            <Button type="button" variant="ghost" size="icon" className="text-cyan-400 rounded-full" title="Upload PDF files" onClick={() => fileInputRef.current.click()} disabled={isSendDisabled}>
               <Upload className="w-6 h-6" />
               <input type="file" ref={fileInputRef} multiple style={{ display: 'none' }} onChange={handleFileChange} accept=".pdf" />
             </Button>
             {files.length > 0 && <span className="text-sm text-gray-400">{files.length} file(s)</span>}
-            <Button type="submit" variant="ghost" size="icon" className="text-cyan-400 rounded-full" disabled={isLoading}>
+            <Button type="submit" variant="ghost" size="icon" className="text-cyan-400 rounded-full" disabled={isLoading && isSendDisabled}>
               <Send className="w-6 h-6" />
             </Button>
           </form>

@@ -30,8 +30,6 @@ function Footer() {
             <NavLink to="/" className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors'>Home</NavLink>
             <a href="/#how-it-works" className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors cursor-pointer' onClick={(e) => { e.preventDefault(); handleScroll("how-it-works"); }}>How it works</a>
             <a href={mailtoLink} className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors'>Contact Us</a>
-            <NavLink to="/signup" className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors'>Sign up</NavLink>
-            <NavLink to="/login" className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors'>Log In</NavLink>
             <NavLink to="/privacy-policy" className='text-[#13E3FF] hover:text-[#0FC9E8] transition-colors'>Privacy Policy</NavLink>
         </div>
         <p className='text-sm mt-4'>© 2025 RAG. All Rights Reserved</p>

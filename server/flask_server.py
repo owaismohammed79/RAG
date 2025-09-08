@@ -14,7 +14,7 @@ from appwrite.permission import Permission
 from appwrite.role import Role
 from dotenv import load_dotenv
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 load_dotenv()
 
@@ -33,6 +33,7 @@ databases = Databases(client)
 db_id = os.getenv("VITE_APPWRITE_DATABASE_ID")
 conv_collection_id = os.getenv("VITE_APPWRITE_CONVERSATIONS_COLL_ID")
 msg_collection_id = os.getenv("VITE_APPWRITE_MESSAGES_COLL_ID")
+user_limits_collection_id = os.getenv("VITE_APPWRITE_USER_LIMITS_COLL_ID")
 
 #Authentication Decorator
 def auth_required(f):
@@ -52,7 +53,7 @@ def auth_required(f):
             user_client.set_jwt(jwt_token)
 
             user_account = Account(user_client)
-            user = user_account.get() # This verifies the JWT and gets the user
+            user = user_account.get() #verifies the JWT and gets the user
             kwargs['user'] = user
         except Exception as e:
             return jsonify({'error': 'Invalid or expired token', 'details': str(e)}), 401
@@ -79,8 +80,66 @@ def process_documents_without_voice(user):
         return jsonify({'error': 'Missing question argument'}), 400
 
     current_timestamp = datetime.now().isoformat()
+    today_str = date.today().isoformat()
 
-    # --- Handle new conversation ---
+    MAX_PROMPTS_PER_DAY = 10
+    prompts_remaining = MAX_PROMPTS_PER_DAY
+
+    try:
+        user_limit_docs = databases.list_documents(
+            db_id,
+            user_limits_collection_id,
+            queries=[Query.equal('userId', user_id)]
+        )
+        user_limit_doc = user_limit_docs['documents'][0] if user_limit_docs['documents'] else None
+
+        if user_limit_doc:
+            last_reset_date = user_limit_doc.get('lastResetDate')
+            prompt_count = user_limit_doc.get('promptCount', 0)
+
+            if last_reset_date != today_str:
+                #Reset for a new day
+                databases.update_document(
+                    db_id,
+                    user_limits_collection_id,
+                    user_limit_doc['$id'],
+                    {'promptCount': 1, 'lastResetDate': today_str}
+                )
+                prompts_remaining = MAX_PROMPTS_PER_DAY - 1
+            else:
+                #Same day, check count
+                if prompt_count >= MAX_PROMPTS_PER_DAY:
+                    return jsonify({'error': f'Daily prompt limit of {MAX_PROMPTS_PER_DAY} reached. Please try again tomorrow.'}), 429
+                
+                databases.update_document(
+                    db_id,
+                    user_limits_collection_id,
+                    user_limit_doc['$id'],
+                    {'promptCount': prompt_count + 1}
+                )
+                prompts_remaining = MAX_PROMPTS_PER_DAY - (prompt_count + 1)
+        else:
+            #First prompt, create document
+            databases.create_document(
+                db_id,
+                user_limits_collection_id,
+                ID.unique(),
+                {
+                    'userId': user_id,
+                    'promptCount': 1,
+                    'lastResetDate': today_str
+                },
+                permissions=[
+                    Permission.read(Role.user(user_id)),
+                    Permission.update(Role.user(user_id)),
+                    Permission.delete(Role.user(user_id)),
+                ]
+            )
+            prompts_remaining = MAX_PROMPTS_PER_DAY - 1
+    except Exception as e:
+        print(f"Error managing user prompt limit: {e}")
+
+    #new conversation
     if not conversation_id or conversation_id == 'null':
         try:
             doc = databases.create_document(
@@ -131,7 +190,7 @@ def process_documents_without_voice(user):
             ]
         )
     except Exception as e:
-        #log this error but continue, as getting an answer is more important
+        #log this error and continue, as getting an answer is more important
         print(f"Error saving user message: {e}")
 
     if files:
@@ -140,13 +199,18 @@ def process_documents_without_voice(user):
         #Add user_id to metadata for filtering
         for chunk in chunks:
             chunk.metadata['user_id'] = user_id
+            chunk.metadata['conversation_id'] = conversation_id
         get_vector_store(chunks)
     
     embeddings = get_embedding_function()
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
     
-    # Similarity search with user_id filter
-    retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': {'user_id': user_id}})
+    #Similarity search with user_id and conversation_id filter
+    search_filter = {
+        'user_id': user_id,
+        'conversation_id': conversation_id
+    }
+    retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
     docs = retriever.get_relevant_documents(user_prompt)
     
     context_documents = docs if docs else []
@@ -158,7 +222,7 @@ def process_documents_without_voice(user):
         fallback_response = model.generate_content(user_prompt)
         response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
 
-    # --- Save bot message ---
+    #Saving bot message
     try:
         databases.create_document(
             db_id,
@@ -168,9 +232,9 @@ def process_documents_without_voice(user):
                 'conversationId': conversation_id, 
                 'senderType': 'bot', 
                 'content': response_text,
-                'timestamp': datetime.now().isoformat() # Add timestamp
+                'timestamp': datetime.now().isoformat()
             },
-            permissions=[ # Set permissions directly
+            permissions=[
                 Permission.read(Role.user(user_id)),
                 Permission.update(Role.user(user_id)),
                 Permission.delete(Role.user(user_id)),
@@ -179,7 +243,7 @@ def process_documents_without_voice(user):
     except Exception as e:
         print(f"Error saving bot message: {e}")
 
-    return jsonify({'answer': response_text, 'conversationId': conversation_id})
+    return jsonify({'answer': response_text, 'conversationId': conversation_id, 'promptsRemaining': prompts_remaining})
 
 @app.route('/api/conversations', methods=['GET'])
 @auth_required
@@ -193,12 +257,47 @@ def get_conversations(user):
         return jsonify(result['documents'])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/user/prompt-limit', methods=['GET'])
+@auth_required
+def get_user_prompt_limit(user):
+    user_id = user['$id']
+    MAX_PROMPTS_PER_DAY = 10
+    prompts_remaining = MAX_PROMPTS_PER_DAY
+
+    try:
+        user_limit_docs = databases.list_documents(
+            db_id,
+            user_limits_collection_id,
+            queries=[Query.equal('userId', user_id)]
+        )
+        user_limit_doc = user_limit_docs['documents'][0] if user_limit_docs['documents'] else None
+        today_str = date.today().isoformat()
+
+        if user_limit_doc:
+            last_reset_date = user_limit_doc.get('lastResetDate')
+            prompt_count = user_limit_doc.get('promptCount', 0)
+
+            if last_reset_date != today_str:
+                #new day, reset count
+                prompts_remaining = MAX_PROMPTS_PER_DAY
+            else:
+                #Same day
+                prompts_remaining = MAX_PROMPTS_PER_DAY - prompt_count
+                if prompts_remaining < 0:
+                    prompts_remaining = 0
+        
+        return jsonify({'promptsRemaining': prompts_remaining, 'maxPrompts': MAX_PROMPTS_PER_DAY})
+    except Exception as e:
+        print(f"Error fetching user prompt limit: {e}")
+        return jsonify({'error': 'Failed to fetch prompt limit', 'details': str(e)}), 500
+
 
 @app.route('/api/conversations/<conversation_id>', methods=['GET'])
 @auth_required
 def get_messages(user, conversation_id):
     try:
-        # First, verify the user owns this conversation
+        #verify the user is the owner of this conversation
         convo = databases.get_document(db_id, conv_collection_id, conversation_id)
         if convo['userId'] != user['$id']:
             return jsonify({'error': 'Unauthorized'}), 403
@@ -216,12 +315,12 @@ def get_messages(user, conversation_id):
 @auth_required
 def delete_conversation(user, conversation_id):
     try:
-        # Verify the user owns this conversation
+        #Verify the user is the owner of this conversation
         convo = databases.get_document(db_id, conv_collection_id, conversation_id)
         if convo['userId'] != user['$id']:
             return jsonify({'error': 'Unauthorized'}), 403
 
-        # Delete all messages associated with the conversation
+        #Delete all messages associated with the conversation
         messages_to_delete = databases.list_documents(
             db_id,
             msg_collection_id,
@@ -230,7 +329,7 @@ def delete_conversation(user, conversation_id):
         for msg in messages_to_delete['documents']:
             databases.delete_document(db_id, msg_collection_id, msg['$id'])
 
-        # Delete the conversation itself
+        #Delete the conversation itself
         databases.delete_document(db_id, conv_collection_id, conversation_id)
         
         return jsonify({'message': 'Conversation and associated messages deleted successfully'}), 200

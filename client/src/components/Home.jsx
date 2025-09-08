@@ -1,12 +1,15 @@
 import React from 'react'
 import Navbar from './Navbar'
 import { Typewriter } from 'react-simple-typewriter'
+import { useNavigate } from 'react-router-dom'
 
 export default function Home() {
+  const navigate = useNavigate()
+
   return (
     <div className="bg-[#1C221C] text-white overflow-hidden flex justify-center">
       <Navbar />
-      <main className="relative px-4 py-16 md:py-24">
+      <main className="relative mt-10 sm:mt-4 px-4 py-16 md:py-24">
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -41,7 +44,7 @@ export default function Home() {
               extract maximum value from your documents.
             </p>
             
-            <button className='group bg-[#13E3FF] text-black rounded-xl font-bold py-3 px-6 text-xl flex items-center transition-all hover:bg-[#0FC9E8] hover:shadow-lg hover:shadow-[#13E3FF]/20'>
+            <button className='group bg-[#13E3FF] text-black rounded-xl font-bold py-3 px-6 text-xl flex items-center transition-all hover:bg-[#0FC9E8] hover:shadow-lg hover:shadow-[#13E3FF]/20' onClick={() => navigate('/signup')}>
               <span>Start Now</span>
               <img 
                 src="/collection-arrow-doodles.svg" 
