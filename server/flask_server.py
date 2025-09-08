@@ -207,8 +207,10 @@ def process_documents_without_voice(user):
     
     #Similarity search with user_id and conversation_id filter
     search_filter = {
-        'user_id': user_id,
-        'conversation_id': conversation_id
+        "$and": [
+            {'user_id': user_id},
+            {'conversation_id': conversation_id}
+        ]
     }
     retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
     docs = retriever.get_relevant_documents(user_prompt)
