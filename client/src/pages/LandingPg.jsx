@@ -3,9 +3,23 @@ import HowItWorks from '../components/HowItWorks'
 import {Button} from '../components/ui/button'
 import Footer from '../components/Footer'
 import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { conf } from '../config/conf'
 
 function LandingPg() {
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const pingBackend = async () => {
+      try {
+        await fetch(`${conf.BackendURL}/api/ping`);
+        console.log("Backend pinged successfully.");
+      } catch (error) {
+        console.error("Failed to ping backend:", error);
+      }
+    };
+    pingBackend();
+  }, []);
 
   return (
     <div>

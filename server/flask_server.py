@@ -35,6 +35,11 @@ conv_collection_id = os.getenv("VITE_APPWRITE_CONVERSATIONS_COLL_ID")
 msg_collection_id = os.getenv("VITE_APPWRITE_MESSAGES_COLL_ID")
 user_limits_collection_id = os.getenv("VITE_APPWRITE_USER_LIMITS_COLL_ID")
 
+@app.route('/api/ping', methods=['GET'])
+def ping():
+    """A simple endpoint to wake up the server"""
+    return jsonify({'status': 'awake'}), 200
+
 #Authentication Decorator
 def auth_required(f):
     @wraps(f)
