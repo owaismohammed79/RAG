@@ -2,7 +2,10 @@ from flask import Flask, request, jsonify
 from main import load_documents, split_documents, user_input, get_vector_store, get_embedding_function, CHROMA_PATH
 from langchain_chroma import Chroma
 from flask_cors import CORS
-import google.generativeai as genai
+# import google.generativeai as genai
+from google import genai
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import os
 from functools import wraps
 from appwrite.client import Client
@@ -20,6 +23,8 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL")}})
+
+gclient = genai.Client()
 
 #Appwrite Client Initialization
 client = Client()
@@ -66,9 +71,16 @@ def auth_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["60 per minute"]
+)
+
 
 @app.route('/api/prompt/text-file', methods=['POST'])
 @auth_required
+@limiter.limit("60 per minute")
 def process_documents_without_voice(user):
     user_id = user['$id']
     user_prompt = request.form.get('prompt')
@@ -218,15 +230,16 @@ def process_documents_without_voice(user):
         ]
     }
     retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
-    docs = retriever.get_relevant_documents(user_prompt)
+    docs = retriever.invoke(user_prompt)
     
     context_documents = docs if docs else []
 
     response_text = user_input(user_prompt, context_documents, history)
     
     if "Answer is not available in the context" in response_text:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        fallback_response = model.generate_content(user_prompt)
+        # model = genai.GenerativeModel("gemini-2.5-flash-lite-001")
+        # fallback_response = model.generate_content(user_prompt)
+        fallback_response = gclient.models.generate_content(model="gemini-2.0-flash-lite", contents=user_prompt)
         response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
 
     #Saving bot message
@@ -247,6 +260,9 @@ def process_documents_without_voice(user):
                 Permission.delete(Role.user(user_id)),
             ]
         )
+    except ResourceExhausted:
+        return jsonify({'error': 'The service is currently busy due to high demand. Please wait a moment and try your request again.'}), 429
+
     except Exception as e:
         print(f"Error saving bot message: {e}")
 

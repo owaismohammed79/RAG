@@ -1,8 +1,12 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
+import stat
+import time
+from tenacity import retry, wait_exponential, stop_after_attempt
 from typing import List
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredPDFLoader
-import google.generativeai as genai
+from langchain_community.document_loaders import PyPDFLoader
+# import google.generativeai as genai
+from google import genai
 from google.generativeai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
@@ -17,7 +21,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CHROMA_PATH="chroma"
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+gclient = genai.Client()
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 data_path = r"data"
 #data_path=r"no_data"
 
@@ -159,28 +164,44 @@ def split_documents(documents: list[Document]):
     )
     return text_splitter.split_documents(documents)
 
+# Retry decorator for API calls
+@retry(wait=wait_exponential(multiplier=2, min=5, max=60), stop=stop_after_attempt(5))
+def add_documents_with_retry(db, batch, ids):
+    db.add_documents(batch, ids=ids)
+
 def get_vector_store(text_chunks: list[Document]):
-    embeddings=get_embedding_function()
-    db=Chroma(
-        persist_directory=CHROMA_PATH,embedding_function=embeddings)
-    
+    embeddings = get_embedding_function()
+    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
+
     chunks_with_ids = calculate_chunk_ids(text_chunks)
 
     existing_items = db.get(include=[])
     existing_ids = set(existing_items["ids"])
-    print(f"Number of existing documents in DB: {len(existing_ids)}")
+    print(f"Existing documents in DB: {len(existing_ids)}")
 
-    new_chunks = []
-    for chunk in chunks_with_ids:
-        if chunk.metadata["id"] not in existing_ids:
-            new_chunks.append(chunk)
+    # Filter only new chunks
+    new_chunks = [chunk for chunk in chunks_with_ids if chunk.metadata["id"] not in existing_ids]
 
-    if len(new_chunks):
-        print(f"Adding new documents: {len(new_chunks)}")
-        new_chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
-        db.add_documents(new_chunks,ids=new_chunk_ids)
-    else:
-        print("No new documents to add")
+    if not new_chunks:
+        print("No new documents to add.")
+        return
+
+    print(f"Adding {len(new_chunks)} new chunks to the database.")
+
+    # Batching 
+    batch_size = 5
+    for i in range(0, len(new_chunks), batch_size):
+        batch = new_chunks[i:i + batch_size]
+        batch_ids = [chunk.metadata["id"] for chunk in batch]
+        try:
+            print(f"Processing batch {(i // batch_size) + 1}/{(len(new_chunks) + batch_size - 1) // batch_size}...")
+            add_documents_with_retry(db, batch, batch_ids)
+            time.sleep(0.5) #small delay
+        except Exception as e:
+            print(f"Failed to process batch after retries: {e}")
+            continue
+
+    print("All new chunks processed successfully.")
 
 
 def get_embedding_function():
@@ -209,6 +230,28 @@ def calculate_chunk_ids(chunks):
 
     return chunks
 
+def onexc_handler(func, path, exc_info):
+    """
+    Error handler for shutil.rmtree, Changes permissions on read only files and retries the operation.
+    """
+    exception_object = exc_info[1]
+    if isinstance(exception_object, OSError) and 'winerror' in dir(exception_object) and exception_object.winerror == 5:
+        file_path = exception_object.filename
+        os.chmod(file_path, stat.S_IWRITE)        
+        func(file_path)
+    else:
+        raise
+        
+if os.path.exists(CHROMA_PATH):
+    print(f"Deleting persistent directory: {CHROMA_PATH}")
+    try:
+        shutil.rmtree(CHROMA_PATH, onexc=onexc_handler)
+        print("Directory successfully deleted")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+else:
+    print("Directory does not exist, no action needed")
+
 def clear_database():
     if os.path.exists(CHROMA_PATH):
         try:
@@ -218,7 +261,7 @@ def clear_database():
             print(f"Error closing Chroma client: {e}")
         
         try:
-            shutil.rmtree(CHROMA_PATH)
+            shutil.rmtree(CHROMA_PATH, onexc=onexc_handler)
         except PermissionError as e:
             print(f"Failed to delete Chroma database: {e}")
 
@@ -248,8 +291,7 @@ def user_input(user_question, context_documents, history):
     Answer:
     """
     
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+    response = gclient.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
     return response.text
 
 def main():
@@ -267,7 +309,7 @@ def main():
         user_question = input("Ask a question (without PDF context): ")
 
         if user_question:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-2.0-flash-lite")
             response = model.generate_content(user_question)
             print(response.text) 
     else:
