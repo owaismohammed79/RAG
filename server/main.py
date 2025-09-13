@@ -289,7 +289,7 @@ def user_input(user_question, context_documents, history):
     Answer:
     """
     model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.3)
-    response = model.generate_content(prompt)
+    response = model.invoke(prompt)
     print(response)
     return response.content
 
@@ -309,7 +309,7 @@ def main():
 
         if user_question:
             model = genai.GenerativeModel("gemini-2.0-flash-lite")
-            response = model.generate_content(user_question)
+            response = model.invoke(user_question)
     else:
         # Documents exist, proceed with processing
         chunks = split_documents(documents)

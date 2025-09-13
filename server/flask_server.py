@@ -238,7 +238,7 @@ def process_documents_without_voice(user):
     
     if "Answer is not available in the context" in response_text:
         model = genai.GenerativeModel("gemini-2.0-flash-lite")
-        fallback_response = model.generate_content(user_prompt)
+        fallback_response = model.invoke(user_prompt)
         # fallback_response = gclient.models.generate_content(model="gemini-2.0-flash-lite", contents=user_prompt)
         response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.content
 
