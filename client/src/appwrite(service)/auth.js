@@ -13,7 +13,7 @@ export class AuthService{
     }
 
     async googleLogin(){
-        await this.account.createOAuth2Session(OAuthProvider.Google, `${conf.BaseUrl}/chat`, `${conf.BaseUrl}/fail`)
+        await this.account.createOAuth2Session(OAuthProvider.Google, `${conf.BaseUrl}/auth-callback`, `${conf.BaseUrl}/login`)
     }
 
     async getJWT() {

@@ -8,79 +8,75 @@ import authService from '../appwrite(service)/auth'
 import { useContext,useState, useEffect } from 'react'
 import { UserDataContext } from '../Context/UserDataContextProvider'
 import {Label} from '../components/ui/label'
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from 'lucide-react'
 
 function Signup({variable}) {
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const {register,handleSubmit,formState: { errors }} = useForm()
   const navigate = useNavigate()
   const {userData, setUserData} = useContext(UserDataContext)
+  const [formError, setFormError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const loadUserDataFromAppwrite = async () => {
-      if(userData){
-        if(window.location.pathname === '/login'){
-          navigate('/chat');
-        }
+    const checkForActiveSession = async () => {
+      if (userData) {
+        navigate('/chat');
         return;
       }
       try {
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
           setUserData(currentUser);
-          localStorage.setItem('userData', JSON.stringify(currentUser));
-          if (window.location.pathname === '/login') {
-              navigate('/chat');
-          }
-        } else {
-          setUserData(null);
-          localStorage.removeItem('userData');
-          console.log("No active Appwrite session. Redirecting to /login.");
-          navigate(window.location.pathname);
+          navigate('/chat');
         }
       } catch (error) {
-        console.error("Error fetching user from Appwrite:", error);
-        setUserData(null);
-        localStorage.removeItem('userData');
-        navigate(window.location.pathname);
+        // User not logged in, No action needed.
+        console.log("No active session found", error);
       }
     };
-    if (!userData) {
-      loadUserDataFromAppwrite();
-    }
+    checkForActiveSession();
   }, [userData, setUserData, navigate]);
 
-  const handleSignup = (e, data) => {
-    try{
-      authService.createAccount({email: data.target[0].value, password: data.target[1].value}).then((data) => {
-        setUserData(data)
-        navigate('/chat')
-      })
-    } catch (error) {
-      console.error("Appwrite error::", error)
-    }
-  }
-
-  function handleEmailLogin(e, data) {
-    try{
-      authService.login({email: data.target[0].value, password: data.target[1].value}).then((res) => {
-        setUserData(res)
-        localStorage.setItem('userData', JSON.stringify(res))
-        console.log(res)
-        navigate('/chat')
-      })
-    } catch (error) {
-      console.error("Appwrite error::", error)
-    }
-  }
-
-  const handleGoogleLogin = async() => {
+  const handleAuth = async (data) => {
+    setFormError(null);
+    setIsLoading(true);
     try {
-      await authService.googleLogin()
+      if (variable === "Sign up") {
+        await authService.createAccount({ email: data.email, password: data.password });
+      } else {
+        await authService.login({ email: data.email, password: data.password });
+      }
+      
+      const currentUser = await authService.getCurrentUser();
+      if (currentUser) {
+        setUserData(currentUser);
+        localStorage.setItem('userData', JSON.stringify(currentUser));
+        navigate('/chat');
+      } else {
+        setFormError("Authentication successful, but failed to retrieve user data. Please try logging in again.");
+      }
     } catch (error) {
-      console.error(error)
+      console.error("Authentication error:", error);
+      setFormError(error.message || "An unexpected error occurred during authentication.");
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
+
+  const handleGoogleLogin = async () => {
+    setFormError(null);
+    setIsLoading(true);
+    try {
+      await authService.googleLogin();
+    } catch (error) {
+      console.error("Google login error:", error);
+      setFormError(error.message || "Failed to initiate Google login.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className='w-full min-h-screen flex flex-col justify-center items-center px-2 py-4 bg-[#1C221C] text-white relative'>
@@ -110,14 +106,20 @@ function Signup({variable}) {
                   </p>)}
               </div>
             </div>
-            <Button className="w-full bg-white text-black hover:bg-white/80 border-hidden" onClick={() => handleGoogleLogin()}>
+            {formError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+            <Button className="w-full bg-white text-black hover:bg-white/80 border-hidden" onClick={() => handleGoogleLogin()} disabled={isLoading}>
               <div className='flex justify-center items-center gap-3'>
                 <img src='/Google_Icon.svg' alt='Google' className='w-7 h-7 mt-0.5'/>
                 <span className='text-[16px]'>Continue with Google</span>
               </div>
             </Button>
             <span className='text-white'>OR</span>
-            <form onSubmit={variable === "Sign up" ? handleSubmit(handleSignup): handleSubmit(handleEmailLogin)} className='flex flex-col justify-between items-center gap-3 w-full text-white'>
+            <form onSubmit={handleSubmit(handleAuth)} className='flex flex-col justify-between items-center gap-3 w-full text-white'>
               <Label className="place-self-start" htmlFor="email">Email</Label>
               <Input type='email' id="email" placeholder='yourname@gmail.com' className='w-full text-white focus-visible:ring-0 focus:bg-transparent' {...register("email", {
                   required: true,
@@ -129,17 +131,19 @@ function Signup({variable}) {
               <Label className="place-self-start" htmlFor="userpassword">Password</Label>
               <div className='flex w-full border border-slate-100 rounded-lg'>
                 <Input id="userpassword" placeholder={variable === "Sign up" ? 'Create a new password' : 'Enter your password'} className='w-full text-white border-none focus-visible:ring-0' type={showPassword ? "text" : "password"}
-                onChange={(e) => setPassword(e.target.value)} {...register("password", {
+                {...register("password", {
                   required: true,
                   validate: {
                     matchPattern: (value) => /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[a-zA-Z]).{8,}$/.test(value) ||
                     "Password should be at least 8 characters long with lower, upperCase alphabets and number"
                   }
-                })} />
+                })} disabled={isLoading}/>
                 <Button onClick={() => setShowPassword(showPassword => !showPassword) } className="bg-transparent hover:bg-transparent">{showPassword ? <img src='/eye-open.svg' alt="Eye open icon" /> : <img src="/eye-closed.svg" alt="Eye closed icon"/>}</Button>
               </div>
               {errors.password && <span className='text-red-500'>{errors.password.message}</span>}
-              <Button className='bg-[#13E3FF] w-full text-black hover:bg-[#13E3FF]/70' type="submit">{variable}</Button>
+              <Button className='bg-[#13E3FF] w-full text-black hover:bg-[#13E3FF]/70' type="submit" disabled={isLoading}>
+                {isLoading ? "Processing..." : variable}
+              </Button>
             </form>
             <div className='text-white text-center text-xs'>By continuing, you agree to RAG&apos;s Consumer Terms and Usage Policy, and acknowledge their Privacy Policy</div>
           </CardContent>

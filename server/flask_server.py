@@ -2,8 +2,8 @@ from flask import Flask, request, jsonify
 from main import load_documents, split_documents, user_input, get_vector_store, get_embedding_function, CHROMA_PATH
 from langchain_chroma import Chroma
 from flask_cors import CORS
-# import google.generativeai as genai
-from google import genai
+import google.generativeai as genai
+# from google import genai
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
@@ -24,7 +24,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL")}})
 
-gclient = genai.Client()
+# gclient = genai.Client()
 
 #Appwrite Client Initialization
 client = Client()
@@ -237,10 +237,10 @@ def process_documents_without_voice(user):
     response_text = user_input(user_prompt, context_documents, history)
     
     if "Answer is not available in the context" in response_text:
-        # model = genai.GenerativeModel("gemini-2.5-flash-lite-001")
-        # fallback_response = model.generate_content(user_prompt)
-        fallback_response = gclient.models.generate_content(model="gemini-2.0-flash-lite", contents=user_prompt)
-        response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
+        model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        fallback_response = model.generate_content(user_prompt)
+        # fallback_response = gclient.models.generate_content(model="gemini-2.0-flash-lite", contents=user_prompt)
+        response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.content
 
     #Saving bot message
     try:

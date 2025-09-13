@@ -5,8 +5,7 @@ import time
 from tenacity import retry, wait_exponential, stop_after_attempt
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader
-# import google.generativeai as genai
-from google import genai
+import google.generativeai as genai
 from google.generativeai import types
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_chroma import Chroma
@@ -21,8 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CHROMA_PATH="chroma"
-gclient = genai.Client()
-# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 data_path = r"data"
 #data_path=r"no_data"
 
@@ -290,9 +288,10 @@ def user_input(user_question, context_documents, history):
 
     Answer:
     """
-    
-    response = gclient.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
-    return response.text
+    model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.3)
+    response = model.generate_content(prompt)
+    print(response)
+    return response.content
 
 def main():
     # clear_database()
@@ -311,7 +310,6 @@ def main():
         if user_question:
             model = genai.GenerativeModel("gemini-2.0-flash-lite")
             response = model.generate_content(user_question)
-            print(response.text) 
     else:
         # Documents exist, proceed with processing
         chunks = split_documents(documents)
