@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchConversations, setActiveConversation, fetchMessages, startNewChat, deleteConversation } from '../redux/convoSlice';
+import { logout as reduxLogout} from '../redux/authSlice';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, X } from 'lucide-react';
+import { PlusCircle, X, LogOut } from 'lucide-react';
+import authService from '../appwrite(service)/auth';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -14,11 +16,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useNavigate } from 'react-router-dom';
 
-const ConversationHistory = ({ jwt }) => {
+const ConversationHistory = () => {
     const dispatch = useDispatch();
     const { conversations, activeConversationId, status } = useSelector(state => state.conversation);
+    const { jwt } = useSelector(state => state.auth)
     const [isDeleting, setIsDeleting] = useState(false);
+    const navigate = useNavigate()
 
     useEffect(() => {
         if (jwt) {
@@ -47,6 +52,17 @@ const ConversationHistory = ({ jwt }) => {
             console.error("Failed to delete conversation:", error);
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await authService.logout();
+            dispatch(reduxLogout());
+            localStorage.removeItem('userData');
+            navigate('/login');
+        } catch (error) {
+            console.error("Logout failed:", error);
         }
     };
 
@@ -108,6 +124,10 @@ const ConversationHistory = ({ jwt }) => {
                     ))
                 )}
             </div>
+            <Button onClick={handleLogout} className="flex items-center justify-start gap-2 bg-red-600 hover:bg-red-700 mt-4">
+                <LogOut className="w-5 h-5" />
+                <span>Logout</span>
+            </Button>
         </div>
     );
 };

@@ -4,40 +4,28 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {useForm} from 'react-hook-form'
 import { useNavigate, Link } from 'react-router-dom'
-import authService from '../appwrite(service)/auth'
-import { useContext,useState, useEffect } from 'react'
-import { UserDataContext } from '../Context/UserDataContextProvider'
+import authService from '../appwrite(service)/auth.js'
+import { useState, useEffect } from 'react'
 import {Label} from '../components/ui/label'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from 'lucide-react'
+import { useSelector, useDispatch } from 'react-redux'
+import { login } from '../redux/authSlice'
 
 function Signup({variable}) {
   const [showPassword, setShowPassword] = useState(false);
   const {register,handleSubmit,formState: { errors }} = useForm()
   const navigate = useNavigate()
-  const {userData, setUserData} = useContext(UserDataContext)
+  const { userData } = useSelector(state => state.auth)
+  const dispatch = useDispatch()
   const [formError, setFormError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const checkForActiveSession = async () => {
-      if (userData) {
-        navigate('/chat');
-        return;
-      }
-      try {
-        const currentUser = await authService.getCurrentUser();
-        if (currentUser) {
-          setUserData(currentUser);
-          navigate('/chat');
-        }
-      } catch (error) {
-        // User not logged in, No action needed.
-        console.log("No active session found", error);
-      }
-    };
-    checkForActiveSession();
-  }, [userData, setUserData, navigate]);
+    if (userData) {
+      navigate('/chat')
+    }
+  }, [])
 
   const handleAuth = async (data) => {
     setFormError(null);
@@ -45,15 +33,15 @@ function Signup({variable}) {
     try {
       if (variable === "Sign up") {
         await authService.createAccount({ email: data.email, password: data.password });
-      } else {
-        await authService.login({ email: data.email, password: data.password });
       }
+        await authService.login({ email: data.email, password: data.password });
       
       const currentUser = await authService.getCurrentUser();
       if (currentUser) {
-        setUserData(currentUser);
-        localStorage.setItem('userData', JSON.stringify(currentUser));
-        navigate('/chat');
+        const jwt = await authService.getJWT()
+        dispatch(login({ userData: currentUser, jwt: jwt.jwt }))
+        localStorage.setItem('userData', JSON.stringify(currentUser))
+        navigate('/chat')
       } else {
         setFormError("Authentication successful, but failed to retrieve user data. Please try logging in again.");
       }
@@ -65,21 +53,16 @@ function Signup({variable}) {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setFormError(null);
-    setIsLoading(true);
+  const handleGoogleLogin = async() => {
     try {
-      await authService.googleLogin();
+      await authService.googleLogin()
     } catch (error) {
-      console.error("Google login error:", error);
-      setFormError(error.message || "Failed to initiate Google login.");
-    } finally {
-      setIsLoading(false);
+      console.error(error)
     }
-  };
+  }
 
   return (
-    <div className='w-full min-h-screen flex flex-col justify-center items-center px-2 py-4 bg-[#1C221C] text-white relative'>
+    <div className='w-full h-[100dvh] flex flex-col justify-center items-center px-2 py-4 bg-[#1C221C] text-white relative'>
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -112,7 +95,7 @@ function Signup({variable}) {
                 <AlertDescription>{formError}</AlertDescription>
               </Alert>
             )}
-            <Button className="w-full bg-white text-black hover:bg-white/80 border-hidden" onClick={() => handleGoogleLogin()} disabled={isLoading}>
+            <Button className="w-full bg-white text-black hover:bg-white/80 border-hidden" onClick={handleGoogleLogin} disabled={isLoading}>
               <div className='flex justify-center items-center gap-3'>
                 <img src='/Google_Icon.svg' alt='Google' className='w-7 h-7 mt-0.5'/>
                 <span className='text-[16px]'>Continue with Google</span>

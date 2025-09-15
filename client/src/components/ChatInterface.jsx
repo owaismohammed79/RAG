@@ -1,9 +1,8 @@
-import { useState, useContext, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Menu, Mic, Send, Upload, PlusCircle, MenuIcon, AlertCircle, X } from 'lucide-react'
+import { Menu, Mic, Send, Upload, PlusCircle, MenuIcon, AlertCircle, X, LogOut } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"
-import { UserDataContext } from '../Context/UserDataContextProvider'
 import { useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import ReactMarkdown from 'react-markdown';
@@ -12,18 +11,19 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import authService from '../appwrite(service)/auth'
 import { addMessage, setConversationId, fetchConversations } from '../redux/convoSlice'
+import {login as reduxLogin, logout as reduxLogout} from "../redux/authSlice"
 import ConversationHistory from './ConversationHistory'
+import ProcessingAnimation from './ProcessingAnimation'
 import { conf } from '../config/conf'
 
 const SidebarContent = ({ jwt }) => <ConversationHistory jwt={jwt} />;
 
 export default function ChatInterface() {
-  const { setUserData } = useContext(UserDataContext);
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+    const { userData, jwt } = useSelector(state => state.auth);
   const { activeConversationId, messages } = useSelector(state => state.conversation);
-  const [jwt, setJwt] = useState(null);
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
@@ -60,32 +60,46 @@ export default function ChatInterface() {
   }, [jwt]);
 
   useEffect(() => {
-    const checkUser = async () => {
+    const checkUserAndJWT = async () => {
+      if (userData && jwt) {
+        return;
+      }
+
       try {
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
-          setUserData(currentUser);
           const token = await authService.getJWT();
-          setJwt(token.jwt);
+          dispatch(reduxLogin({ userData: currentUser, jwt: token.jwt }));
+          localStorage.setItem('userData', JSON.stringify(currentUser));
         } else {
           const storedUserDataString = localStorage.getItem('userData');
           if (storedUserDataString) {
             const parsedData = JSON.parse(storedUserDataString);
-            setUserData(parsedData);
-            const token = await authService.getJWT();
-            setJwt(token.jwt);
+            //get JWT for the stored user
+            try {
+              const token = await authService.getJWT();
+              dispatch(reduxLogin({ userData: parsedData, jwt: token.jwt }));
+            } catch (jwtError) {
+              console.error("Failed to get JWT for stored user, logging out:", jwtError);
+              dispatch(reduxLogout());
+              localStorage.removeItem('userData');
+              navigate('/login');
+            }
           } else {
+            //No user in session or local storage, redirect to login
+            dispatch(reduxLogout());
             navigate('/login');
           }
         }
       } catch (error) {
         console.error("Authentication check failed:", error);
+        dispatch(reduxLogout());
         localStorage.removeItem('userData');
         navigate('/login');
       }
     };
-    checkUser();
-  }, [navigate, setUserData]);
+    checkUserAndJWT();
+  }, [dispatch, navigate, userData, jwt]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -188,8 +202,19 @@ export default function ChatInterface() {
     setIsLoading(false);
   };
 
+  const handleLogout = async () => {
+    try {
+      await authService.logout()
+      dispatch(reduxLogout())
+      localStorage.removeItem('userData')
+      navigate('/login')
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
+  }
+
   return (
-    <div className="flex h-screen bg-[#0a1a1f] text-white">
+    <div className="flex h-[100dvh] bg-[#0a1a1f] text-white">
       <div className="hidden md:flex md:flex-shrink-0">
         <div className="flex flex-col w-64 border-r border-cyan-950">
           <SidebarContent jwt={jwt} />
@@ -205,17 +230,20 @@ export default function ChatInterface() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 bg-[#0a1a1f] border-cyan-950 p-0">
-                <div className="flex justify-end p-2">
-                    <SheetClose asChild>
-                        <Button variant="ghost" size="icon" className="text-cyan-400 hover:bg-gray-700">
-                            <X className="w-5 h-5" />
-                        </Button>
-                    </SheetClose>
-                </div>
+              <div className="flex justify-end p-2">
+                <SheetClose asChild>
+                  <Button variant="ghost" size="icon" className="text-cyan-400 hover:bg-gray-700">
+                    <X className="w-5 h-5" />
+                  </Button>
+                </SheetClose>
+              </div>
               <SidebarContent jwt={jwt} />
             </SheetContent>
           </Sheet>
           <h1 className="text-lg font-semibold">RAG</h1>
+          <Button onClick={handleLogout} variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
+            <LogOut className="w-5 h-5" />
+          </Button>
         </header>
 
         {browserSupport.message && !browserSupport.supported && (
@@ -225,7 +253,7 @@ export default function ChatInterface() {
           </Alert>
         )}
 
-        <main className="flex-1 p-4 overflow-y-auto">
+        <main className="flex-1 p-4 overflow-y-auto pb-24 md:pb-4">
           <div className="max-w-3xl mx-auto">
             {messages.map((message, index) => (
               <div key={index} className={`mb-4 flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -249,12 +277,12 @@ export default function ChatInterface() {
                 </div>
               </div>
             ))}
-            {isLoading && <div className="text-center text-cyan-400">RAG Bot is thinking...</div>}
+            {isLoading && <ProcessingAnimation />}
             <div ref={chatEndRef} />
           </div>
         </main>
 
-        <div className="p-4 border-t border-cyan-950">
+        <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-cyan-950 bg-[#0a1a1f] md:relative md:pb-4">
           {promptsRemaining !== null && (
             <div className="text-center text-sm text-gray-400 mb-2">
               {promptsRemaining <= 0 ? (
@@ -287,7 +315,7 @@ export default function ChatInterface() {
               <Upload className="w-6 h-6" />
               <input type="file" ref={fileInputRef} multiple style={{ display: 'none' }} onChange={handleFileChange} accept=".pdf" />
             </Button>
-            {files.length > 0 && <span className="text-sm text-gray-400">{files.length} file(s)</span>}
+            {files.length > 0 && (<span className="text-sm text-gray-400 whitespace-nowrap px-2">{files.length} file{files.length > 1 ? 's' : ''}</span>)}
             <Button type="submit" variant="ghost" size="icon" className="text-cyan-400 rounded-full" disabled={isLoading && isSendDisabled}>
               <Send className="w-6 h-6" />
             </Button>

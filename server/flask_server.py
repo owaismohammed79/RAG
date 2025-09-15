@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify
-from main import load_documents, split_documents, user_input, get_vector_store, get_embedding_function, CHROMA_PATH
+from main import load_documents, split_documents, user_input, get_embedding_function, CHROMA_PATH, add_documents_with_retry, calculate_chunk_ids
+from langchain.schema.document import Document
+import time
 from langchain_chroma import Chroma
 from flask_cors import CORS
 import google.generativeai as genai
-# from google import genai
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
@@ -24,8 +25,6 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL")}})
 
-# gclient = genai.Client()
-
 #Appwrite Client Initialization
 client = Client()
 client.set_endpoint(os.getenv("VITE_APPWRITE_ENDPOINT"))
@@ -39,6 +38,10 @@ db_id = os.getenv("VITE_APPWRITE_DATABASE_ID")
 conv_collection_id = os.getenv("VITE_APPWRITE_CONVERSATIONS_COLL_ID")
 msg_collection_id = os.getenv("VITE_APPWRITE_MESSAGES_COLL_ID")
 user_limits_collection_id = os.getenv("VITE_APPWRITE_USER_LIMITS_COLL_ID")
+
+# Initialize ChromaDB globally
+embeddings = get_embedding_function()
+db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
 
 @app.route('/api/ping', methods=['GET'])
 def ping():
@@ -217,10 +220,22 @@ def process_documents_without_voice(user):
         for chunk in chunks:
             chunk.metadata['user_id'] = user_id
             chunk.metadata['conversation_id'] = conversation_id
-        get_vector_store(chunks)
-    
-    embeddings = get_embedding_function()
-    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
+        
+        chunks_with_ids = calculate_chunk_ids(chunks)
+        
+        #Batching 
+        batch_size = 5
+        for i in range(0, len(chunks_with_ids), batch_size):
+            batch = chunks_with_ids[i:i + batch_size]
+            batch_ids = [chunk.metadata["id"] for chunk in batch]
+            try:
+                print(f"Processing batch {(i // batch_size) + 1}/{(len(chunks_with_ids) + batch_size - 1) // batch_size}...")
+                add_documents_with_retry(db, batch, batch_ids)
+                time.sleep(0.3) #small delay
+            except Exception as e:
+                print(f"Failed to process batch after retries: {e}")
+                continue
+        print(f"Added {len(chunks_with_ids)} new chunks to the database.")
     
     #Similarity search with user_id and conversation_id filter
     search_filter = {
@@ -238,9 +253,8 @@ def process_documents_without_voice(user):
     
     if "Answer is not available in the context" in response_text:
         model = genai.GenerativeModel("gemini-2.0-flash-lite")
-        fallback_response = model.invoke(user_prompt)
-        # fallback_response = gclient.models.generate_content(model="gemini-2.0-flash-lite", contents=user_prompt)
-        response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.content
+        fallback_response = model.generate_content(user_prompt)
+        response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
 
     #Saving bot message
     try:
@@ -260,9 +274,6 @@ def process_documents_without_voice(user):
                 Permission.delete(Role.user(user_id)),
             ]
         )
-    except ResourceExhausted:
-        return jsonify({'error': 'The service is currently busy due to high demand. Please wait a moment and try your request again.'}), 429
-
     except Exception as e:
         print(f"Error saving bot message: {e}")
 

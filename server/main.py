@@ -1,7 +1,6 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 import stat
-import time
 from tenacity import retry, wait_exponential, stop_after_attempt
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader
@@ -167,40 +166,6 @@ def split_documents(documents: list[Document]):
 def add_documents_with_retry(db, batch, ids):
     db.add_documents(batch, ids=ids)
 
-def get_vector_store(text_chunks: list[Document]):
-    embeddings = get_embedding_function()
-    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-
-    chunks_with_ids = calculate_chunk_ids(text_chunks)
-
-    existing_items = db.get(include=[])
-    existing_ids = set(existing_items["ids"])
-    print(f"Existing documents in DB: {len(existing_ids)}")
-
-    # Filter only new chunks
-    new_chunks = [chunk for chunk in chunks_with_ids if chunk.metadata["id"] not in existing_ids]
-
-    if not new_chunks:
-        print("No new documents to add.")
-        return
-
-    print(f"Adding {len(new_chunks)} new chunks to the database.")
-
-    # Batching 
-    batch_size = 5
-    for i in range(0, len(new_chunks), batch_size):
-        batch = new_chunks[i:i + batch_size]
-        batch_ids = [chunk.metadata["id"] for chunk in batch]
-        try:
-            print(f"Processing batch {(i // batch_size) + 1}/{(len(new_chunks) + batch_size - 1) // batch_size}...")
-            add_documents_with_retry(db, batch, batch_ids)
-            time.sleep(0.5) #small delay
-        except Exception as e:
-            print(f"Failed to process batch after retries: {e}")
-            continue
-
-    print("All new chunks processed successfully.")
-
 
 def get_embedding_function():
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
@@ -240,15 +205,6 @@ def onexc_handler(func, path, exc_info):
     else:
         raise
         
-if os.path.exists(CHROMA_PATH):
-    print(f"Deleting persistent directory: {CHROMA_PATH}")
-    try:
-        shutil.rmtree(CHROMA_PATH, onexc=onexc_handler)
-        print("Directory successfully deleted")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-else:
-    print("Directory does not exist, no action needed")
 
 def clear_database():
     if os.path.exists(CHROMA_PATH):
