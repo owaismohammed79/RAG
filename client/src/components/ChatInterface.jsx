@@ -138,12 +138,12 @@ export default function ChatInterface() {
 
   const handleFileChange = (event) => {
     const selectedFiles = Array.from(event.target.files);
-    if (selectedFiles.some(file => file.type !== 'application/pdf' || file.size > 10 * 1024 * 1024)) {
-      alert('Please select only PDF files under 10MB.');
+    if (selectedFiles.some(file => file.type !== 'application/pdf' || file.size > 5 * 1024 * 1024)) {
+      alert('Please select only PDF files under 5 MB.');
       return;
     }
-    if (selectedFiles.length > 5) {
-      alert('Please select a maximum of 5 files.');
+    if (selectedFiles.length > 2) {
+      alert('Please select a maximum of 2 files.');
       return;
     }
     setFiles(selectedFiles);
