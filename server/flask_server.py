@@ -19,6 +19,7 @@ from appwrite.role import Role
 from dotenv import load_dotenv
 import json
 from datetime import datetime, date
+import traceback
 
 load_dotenv()
 
@@ -213,48 +214,54 @@ def process_documents_without_voice(user):
         #log this error and continue, as getting an answer is more important
         print(f"Error saving user message: {e}")
 
-    if files:
-        documents = load_documents(files)
-        chunks = split_documents(documents)
-        #Add user_id to metadata for filtering
-        for chunk in chunks:
-            chunk.metadata['user_id'] = user_id
-            chunk.metadata['conversation_id'] = conversation_id
+    try:
+        if files:
+            documents = load_documents(files)
+            chunks = split_documents(documents)
+            #Add user_id to metadata for filtering
+            for chunk in chunks:
+                chunk.metadata['user_id'] = user_id
+                chunk.metadata['conversation_id'] = conversation_id
+            
+            chunks_with_ids = calculate_chunk_ids(chunks)
+            
+            #Batching 
+            batch_size = 5
+            for i in range(0, len(chunks_with_ids), batch_size):
+                batch = chunks_with_ids[i:i + batch_size]
+                batch_ids = [chunk.metadata["id"] for chunk in batch]
+                try:
+                    print(f"Processing batch {(i // batch_size) + 1}/{(len(chunks_with_ids) + batch_size - 1) // batch_size}...")
+                    add_documents_with_retry(db, batch, batch_ids)
+                    time.sleep(0.3) #small delay
+                except Exception as e:
+                    print(f"Failed to process batch after retries: {e}")
+                    continue
+            print(f"Added {len(chunks_with_ids)} new chunks to the database.")
         
-        chunks_with_ids = calculate_chunk_ids(chunks)
+        #Similarity search with user_id and conversation_id filter
+        search_filter = {
+            "$and": [
+                {'user_id': user_id},
+                {'conversation_id': conversation_id}
+            ]
+        }
+        retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
+        docs = retriever.invoke(user_prompt)
         
-        #Batching 
-        batch_size = 5
-        for i in range(0, len(chunks_with_ids), batch_size):
-            batch = chunks_with_ids[i:i + batch_size]
-            batch_ids = [chunk.metadata["id"] for chunk in batch]
-            try:
-                print(f"Processing batch {(i // batch_size) + 1}/{(len(chunks_with_ids) + batch_size - 1) // batch_size}...")
-                add_documents_with_retry(db, batch, batch_ids)
-                time.sleep(0.3) #small delay
-            except Exception as e:
-                print(f"Failed to process batch after retries: {e}")
-                continue
-        print(f"Added {len(chunks_with_ids)} new chunks to the database.")
-    
-    #Similarity search with user_id and conversation_id filter
-    search_filter = {
-        "$and": [
-            {'user_id': user_id},
-            {'conversation_id': conversation_id}
-        ]
-    }
-    retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
-    docs = retriever.invoke(user_prompt)
-    
-    context_documents = docs if docs else []
+        context_documents = docs if docs else []
 
-    response_text = user_input(user_prompt, context_documents, history)
-    
-    if "Answer is not available in the context" in response_text:
-        model = genai.GenerativeModel("gemini-2.0-flash-lite")
-        fallback_response = model.generate_content(user_prompt)
-        response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
+        response_text = user_input(user_prompt, context_documents, history)
+        
+        if "Answer is not available in the context" in response_text:
+            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            fallback_response = model.generate_content(user_prompt)
+            response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
+
+    except Exception as e:
+        print(f"Error during document processing or AI response generation: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'An internal server error occurred during document processing: {str(e)}'}), 500
 
     #Saving bot message
     try:
