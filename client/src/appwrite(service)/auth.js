@@ -1,19 +1,31 @@
-import { Client, Account, ID, OAuthProvider} from "appwrite";
+import { Client, Account, ID, OAuthProvider, Databases, Permission, Role, Query } from "appwrite";
 import { conf } from "../config/conf.js";
 
 export class AuthService{
     client = new Client();
     account;
+    databases;
 
     constructor(){
     this.client
         .setEndpoint(conf.appwriteUrl)
         .setProject(conf.appwriteProjectId);
     this.account = new Account(this.client);
+    this.databases = new Databases(this.client);
     }
 
     async googleLogin(){
-        await this.account.createOAuth2Session(OAuthProvider.Google, `${conf.BaseUrl}/chat`, `${conf.BaseUrl}/login`)
+        try {
+            await this.account.createOAuth2Session(OAuthProvider.Google, `${conf.BaseUrl}/chat`, `${conf.BaseUrl}/login`);
+            const user = await this.getCurrentUser();
+            if (!user) {
+                throw new Error('Failed to register Google user in Appwrite Auth');
+            }
+            return user;
+        } catch (error) {
+            console.log("Appwrite error in Google login:", error);
+            throw error;
+        }
     }
 
     async getJWT() {
@@ -28,10 +40,40 @@ export class AuthService{
 
     async getCurrentUser() {
         try {
-            const user = await this.account.getSession('current');
+            const user = await this.account.get();            
+            try {
+                await this.databases.getDocument(
+                    conf.appwriteDatabaseId,
+                    conf.appwriteUsersCollectionId,
+                    user.$id //making this transaction idempotent
+                );
+                // If getDocument succeeds, the user document already exists
+            } catch (error) {
+                if (error.code === 404) { 
+                    await this.databases.createDocument(
+                        conf.appwriteDatabaseId,
+                        conf.appwriteUsersCollectionId,
+                        user.$id,
+                        {
+                            userId: user.$id,
+                            email: user.email,
+                            status: user.emailVerification,
+                            joined: new Date().toISOString()
+                        },
+                        [
+                            Permission.read(Role.user(user.$id)),
+                            Permission.update(Role.user(user.$id)),
+                            Permission.delete(Role.user(user.$id))
+                        ]
+                    );
+                } else {
+                    console.error("Error checking/creating user document:", error);
+                    throw error;
+                }
+            }
             return user;
         } catch (error) {
-            console.log(`Appwrite error in getting user: ${error}`)
+            console.error("Appwrite error in getting user:", error);
             return null;
         }
     }
@@ -62,7 +104,7 @@ export class AuthService{
 
     async logout(){
         try {
-            await this.account.deleteSessions();
+            await this.account.deleteSession('current');
         } catch (error) {
             console.log("Appwrite error:: Logout", error)
             throw error;

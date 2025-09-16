@@ -10,7 +10,7 @@ import {Label} from '../components/ui/label'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
-import { login } from '../redux/authSlice'
+import { login as reduxLogin, logout as reduxLogout } from '../redux/authSlice'
 
 function Signup({variable}) {
   const [showPassword, setShowPassword] = useState(false);
@@ -39,7 +39,7 @@ function Signup({variable}) {
       const currentUser = await authService.getCurrentUser();
       if (currentUser) {
         const jwt = await authService.getJWT()
-        dispatch(login({ userData: currentUser, jwt: jwt.jwt }))
+        dispatch(reduxLogin({ userData: currentUser, jwt: jwt.jwt }))
         localStorage.setItem('userData', JSON.stringify(currentUser))
         navigate('/chat')
       } else {
@@ -54,7 +54,12 @@ function Signup({variable}) {
   };
 
   const handleGoogleLogin = async() => {
+    setFormError(null);
+    setIsLoading(true);
     try {
+      authService.logout();
+      dispatch(reduxLogout());
+      localStorage.clear();
       await authService.googleLogin()
     } catch (error) {
       console.error(error)

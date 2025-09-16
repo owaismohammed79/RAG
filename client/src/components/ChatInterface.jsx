@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Menu, Mic, Send, Upload, PlusCircle, MenuIcon, AlertCircle, X, LogOut } from 'lucide-react'
+import { Mic, Send, Upload, MenuIcon, AlertCircle, X, LogOut } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"
 import { useNavigate } from 'react-router-dom'
@@ -72,24 +72,10 @@ export default function ChatInterface() {
           dispatch(reduxLogin({ userData: currentUser, jwt: token.jwt }));
           localStorage.setItem('userData', JSON.stringify(currentUser));
         } else {
-          const storedUserDataString = localStorage.getItem('userData');
-          if (storedUserDataString) {
-            const parsedData = JSON.parse(storedUserDataString);
-            //get JWT for the stored user
-            try {
-              const token = await authService.getJWT();
-              dispatch(reduxLogin({ userData: parsedData, jwt: token.jwt }));
-            } catch (jwtError) {
-              console.error("Failed to get JWT for stored user, logging out:", jwtError);
-              dispatch(reduxLogout());
-              localStorage.removeItem('userData');
-              navigate('/login');
-            }
-          } else {
-            //No user in session or local storage, redirect to login
-            dispatch(reduxLogout());
-            navigate('/login');
-          }
+          console.log("No active Appwrite session");
+          dispatch(reduxLogout());
+          localStorage.clear();
+          navigate('/login');
         }
       } catch (error) {
         console.error("Authentication check failed:", error);
