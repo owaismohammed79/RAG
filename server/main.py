@@ -14,6 +14,12 @@ import shutil
 import tempfile
 import subprocess #to run the command as though it ran in the terminal using python subprocess  
 from dotenv import load_dotenv
+import json
+import traceback
+from datetime import datetime
+from appwrite.id import ID
+from appwrite.permission import Permission
+from appwrite.role import Role
 # import logging
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -220,34 +226,107 @@ def clear_database():
             print(f"Failed to delete Chroma database: {e}")
 
 
-def user_input(user_question, context_documents, history):
+
+def generate_stream(user_id, conversation_id, user_question, context_documents, history, databases, db_id: str, msg_collection_id: str):
+    """Generates a streamed response and saves the final answer to the DB"""
+    final_answer_for_db = ""
+    rag_response_buffer = ""
+    
     context = "\n\n".join([doc.page_content for doc in context_documents])
-    
-    history_str = ""
+    history_str_prompt = ""
     for message in history:
-        role = "User" if message.get('type') == 'user' else "Assistant"
-        history_str += f"{role}: {message.get('content')}\n"
+        role = "User" if message.get('type') == 'user' else "bot"
+        history_str_prompt += f"{role}: {message.get('content')}\n"
 
-    prompt = f"""
-    You are an expert RAG assistant that answers questions based on the provided documents and previous conversation. Provide a detailed answer to the question based on the following context.
-    If the answer is not in the provided context, just say, "Answer is not available in the context".
-    Don't provide the wrong answer.
+    try:
+        rag_prompt = f"""
+        You are an expert RAG assistant that answers questions based on the provided documents and previous conversation. Provide a detailed answer to the question based on the following context.
+        If the answer is not in the provided context, just say, "Answer is not available in the context".
+        Don't provide the wrong answer.
 
-    Previous conversation:
-    {history_str}
+        Previous conversation:
+        {history_str_prompt}
+        
+        Context from documents:
+        {context}
+        
+        Question:
+        {user_question}
+
+        Answer:
+        """ 
+        
+        model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.3)
+        
+        print("Starting RAG stream...")
+        rag_stream = model.stream(rag_prompt)
+        
+        for chunk in rag_stream:
+            chunk_content = chunk.content
+            if chunk_content:
+                rag_response_buffer += chunk_content
+                # Sending a JSON event for each RAG chunk
+                yield json.dumps({"type": "rag_chunk", "content": chunk_content}) + "\n"
+
+        if "Answer is not available in the context" in rag_response_buffer:
+            print("RAG context not found. Switching to fallback stream")
+            
+            # Send a special event to tell the frontend to clear its text as context was unavailable
+            yield json.dumps({"type": "fallback_start"}) + "\n"
+
+            fallback_prompt = f"""
+            Previous conversation:
+            {history_str_prompt}
+            
+            Question:
+            {user_question}
+
+            Answer:
+            """
+            fallback_model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.7)
+            fallback_stream = fallback_model.stream(fallback_prompt)
+
+            fallback_buffer = ""
+            for chunk in fallback_stream:
+                chunk_content = chunk.content
+                if chunk_content:
+                    fallback_buffer += chunk_content
+                    yield json.dumps({"type": "fallback_chunk", "content": chunk_content}) + "\n"
+            
+            # Final answer to save in db
+            final_answer_for_db = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_buffer
+        
+        else:
+            print("RAG stream successful")
+            final_answer_for_db = rag_response_buffer
+        
+        # Save final answer to DB
+        try:
+            databases.create_document(
+                db_id,
+                msg_collection_id,
+                ID.unique(),
+                {
+                    'conversationId': conversation_id, 
+                    'senderType': 'bot', 
+                    'content': final_answer_for_db,
+                    'timestamp': datetime.now().isoformat()
+                },
+                permissions=[
+                    Permission.read(Role.user(user_id)),
+                    Permission.update(Role.user(user_id)),
+                    Permission.delete(Role.user(user_id)),
+                ]
+            )
+            print("Final answer saved to DB")
+        except Exception as e:
+            print(f"Error saving bot message after stream: {e}")
     
-    Context from documents:
-    {context}
+    except Exception as e:
+        print(f"Error during AI stream generation: {e}")
+        traceback.print_exc()
+        yield json.dumps({"type": "error", "content": f"An error occurred: {str(e)}"}) + "\n"
     
-    Question:
-    {user_question}
-
-    Answer:
-    """
-    model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.3)
-    response = model.invoke(prompt)
-    print(response)
-    return response.content
 
 def main():
     # clear_database()

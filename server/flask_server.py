@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify
-from main import load_documents, split_documents, user_input, get_embedding_function, CHROMA_PATH, add_documents_with_retry, calculate_chunk_ids
+from flask import Flask, request, jsonify, Response
+from main import load_documents, split_documents, get_embedding_function, CHROMA_PATH, add_documents_with_retry, calculate_chunk_ids, generate_stream
 from langchain.schema.document import Document
 import time
 from langchain_chroma import Chroma
@@ -81,7 +81,6 @@ limiter = Limiter(
     default_limits=["60 per minute"]
 )
 
-
 @app.route('/api/prompt/text-file', methods=['POST'])
 @auth_required
 @limiter.limit("60 per minute")
@@ -119,36 +118,25 @@ def process_documents_without_voice(user):
             prompt_count = user_limit_doc.get('promptCount', 0)
 
             if last_reset_date != today_str:
-                #Reset for a new day
                 databases.update_document(
-                    db_id,
-                    user_limits_collection_id,
-                    user_limit_doc['$id'],
+                    db_id, user_limits_collection_id, user_limit_doc['$id'],
                     {'promptCount': 1, 'lastResetDate': today_str}
                 )
                 prompts_remaining = MAX_PROMPTS_PER_DAY - 1
             else:
-                #Same day, check count
                 if prompt_count >= MAX_PROMPTS_PER_DAY:
                     return jsonify({'error': f'Daily prompt limit of {MAX_PROMPTS_PER_DAY} reached. Please try again tomorrow.'}), 429
                 
                 databases.update_document(
-                    db_id,
-                    user_limits_collection_id,
-                    user_limit_doc['$id'],
+                    db_id, user_limits_collection_id, user_limit_doc['$id'],
                     {'promptCount': prompt_count + 1}
                 )
                 prompts_remaining = MAX_PROMPTS_PER_DAY - (prompt_count + 1)
         else:
-            #First prompt, create document
             databases.create_document(
-                db_id,
-                user_limits_collection_id,
-                ID.unique(),
+                db_id, user_limits_collection_id, ID.unique(),
                 {
-                    'userId': user_id,
-                    'promptCount': 1,
-                    'lastResetDate': today_str
+                    'userId': user_id, 'promptCount': 1, 'lastResetDate': today_str
                 },
                 permissions=[
                     Permission.read(Role.user(user_id)),
@@ -160,13 +148,10 @@ def process_documents_without_voice(user):
     except Exception as e:
         print(f"Error managing user prompt limit: {e}")
 
-    #new conversation
     if not conversation_id or conversation_id == 'null':
         try:
             doc = databases.create_document(
-                db_id,
-                conv_collection_id,
-                ID.unique(),
+                db_id, conv_collection_id, ID.unique(),
                 {
                     'title': user_prompt[:50], 
                     'userId': user_id,
@@ -184,20 +169,15 @@ def process_documents_without_voice(user):
     else:
         try:
             databases.update_document(
-                db_id,
-                conv_collection_id,
-                conversation_id,
+                db_id, conv_collection_id, conversation_id,
                 {'lastMessageAt': current_timestamp}
             )
         except Exception as e:
             print(f"Error updating lastMessageAt for conversation {conversation_id}: {e}")
 
-
     try:
         databases.create_document(
-            db_id,
-            msg_collection_id,
-            ID.unique(),
+            db_id, msg_collection_id, ID.unique(),
             {
                 'conversationId': conversation_id, 
                 'senderType': 'user', 
@@ -211,21 +191,18 @@ def process_documents_without_voice(user):
             ]
         )
     except Exception as e:
-        #log this error and continue, as getting an answer is more important
         print(f"Error saving user message: {e}")
 
     try:
         if files:
             documents = load_documents(files)
             chunks = split_documents(documents)
-            #Add user_id to metadata for filtering
             for chunk in chunks:
                 chunk.metadata['user_id'] = user_id
                 chunk.metadata['conversation_id'] = conversation_id
             
             chunks_with_ids = calculate_chunk_ids(chunks)
             
-            #Batching 
             batch_size = 5
             for i in range(0, len(chunks_with_ids), batch_size):
                 batch = chunks_with_ids[i:i + batch_size]
@@ -233,13 +210,12 @@ def process_documents_without_voice(user):
                 try:
                     print(f"Processing batch {(i // batch_size) + 1}/{(len(chunks_with_ids) + batch_size - 1) // batch_size}...")
                     add_documents_with_retry(db, batch, batch_ids)
-                    time.sleep(0.3) #small delay
+                    time.sleep(0.3) 
                 except Exception as e:
                     print(f"Failed to process batch after retries: {e}")
                     continue
             print(f"Added {len(chunks_with_ids)} new chunks to the database.")
         
-        #Similarity search with user_id and conversation_id filter
         search_filter = {
             "$and": [
                 {'user_id': user_id},
@@ -248,43 +224,47 @@ def process_documents_without_voice(user):
         }
         retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
         docs = retriever.invoke(user_prompt)
-        
         context_documents = docs if docs else []
 
-        response_text = user_input(user_prompt, context_documents, history)
-        
-        if "Answer is not available in the context" in response_text:
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
-            fallback_response = model.generate_content(user_prompt)
-            response_text = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_response.text
-
     except Exception as e:
-        print(f"Error during document processing or AI response generation: {e}")
+        print(f"Error during document processing: {e}")
         traceback.print_exc()
         return jsonify({'error': f'An internal server error occurred during document processing: {str(e)}'}), 500
 
-    #Saving bot message
     try:
-        databases.create_document(
-            db_id,
-            msg_collection_id,
-            ID.unique(),
-            {
-                'conversationId': conversation_id, 
-                'senderType': 'bot', 
-                'content': response_text,
-                'timestamp': datetime.now().isoformat()
-            },
-            permissions=[
-                Permission.read(Role.user(user_id)),
-                Permission.update(Role.user(user_id)),
-                Permission.delete(Role.user(user_id)),
-            ]
+        stream_generator = generate_stream(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            user_question=user_prompt,
+            context_documents=context_documents,
+            history=history,
+            databases=databases,
+            db_id=db_id,
+            msg_collection_id=msg_collection_id
         )
-    except Exception as e:
-        print(f"Error saving bot message: {e}")
+        
+        # We must send convoID n prompts at the end, so create a new generator to chain them
+        def final_stream_with_metadata():
+            # First, yield everything from the AI generator
+            yield from stream_generator
+            
+            # After the AI stream is done, yield the final metadata
+            metadata = {
+                "type": "metadata",
+                "conversationId": conversation_id,
+                "promptsRemaining": prompts_remaining
+            }
+            yield json.dumps(metadata) + "\n"
+            print("Sent final metadata")
 
-    return jsonify({'answer': response_text, 'conversationId': conversation_id, 'promptsRemaining': prompts_remaining})
+
+        return Response(final_stream_with_metadata(), mimetype='application/x-ndjson')
+
+    except Exception as e:
+        print(f"Error calling generate_stream: {e}")
+        traceback.print_exc()
+        return jsonify({'error': f'An internal server error occurred while starting the stream: {str(e)}'}), 500
+
 
 @app.route('/api/conversations', methods=['GET'])
 @auth_required
