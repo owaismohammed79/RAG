@@ -1,4 +1,4 @@
-import { Client, Account, ID, OAuthProvider, Databases, Permission, Role, Query } from "appwrite";
+import { Client, Account, ID, OAuthProvider, Databases, Permission, Role } from "appwrite";
 import { conf } from "../config/conf.js";
 
 export class AuthService{
@@ -94,6 +94,15 @@ export class AuthService{
 
     async login({email, password}){
         try {
+            try {
+                await this.account.get();
+                console.log("Another session found, logging out before login...");
+                await this.account.deleteSession('current');
+            } catch (error) {
+                //Not throwing this error is the best way to handle this
+                console.log("User is guest, proceeding to login.", error);
+            }
+            
             const session = await this.account.createEmailPasswordSession(email, password);
             return {session};
         } catch (error) {
