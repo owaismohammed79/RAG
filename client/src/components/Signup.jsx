@@ -89,7 +89,7 @@ function Signup({variable}) {
                   <p>Already have an account?&nbsp;
                     <Link to="/login" className='underline'>Log In?</Link>
                   </p>) : 
-                  (<p>Don't have an account?&nbsp;
+                  (<p>Don&apos;t have an account?&nbsp;
                     <Link to="/signup" className='underline'>Sign up?</Link>
                   </p>)}
               </div>
@@ -118,7 +118,7 @@ function Signup({variable}) {
               {errors.email && <span className='text-red-500'>Email is required</span>}
               <Label className="place-self-start" htmlFor="userpassword">Password</Label>
               <div className='flex w-full border border-slate-100 rounded-lg'>
-                <Input id="userpassword" placeholder={variable === "Sign up" ? 'Create a new password' : 'Enter your password'} className='w-full text-white border-none focus-visible:ring-0' type={showPassword ? "text" : "password"}
+                <Input id="userpassword" placeholder={variable === "Sign up" ? 'Create a new password' : 'Enter your password'} className='w-full text-white border-none focus-visible:ring-0 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden' type={showPassword ? "text" : "password"}
                 {...register("password", {
                   required: true,
                   validate: {
@@ -126,7 +126,7 @@ function Signup({variable}) {
                     "Password should be at least 8 characters long with lower, upperCase alphabets and number"
                   }
                 })} disabled={isLoading}/>
-                <Button onClick={() => setShowPassword(showPassword => !showPassword) } className="bg-transparent hover:bg-transparent">{showPassword ? <img src='/eye-open.svg' alt="Eye open icon" /> : <img src="/eye-closed.svg" alt="Eye closed icon"/>}</Button>
+                <Button onClick={() => setShowPassword(showPassword => !showPassword) } type="button" className="bg-transparent hover:bg-transparent">{showPassword ? <img src='/eye-open.svg' alt="Eye open icon" /> : <img src="/eye-closed.svg" alt="Eye closed icon"/>}</Button>
               </div>
               {errors.password && <span className='text-red-500'>{errors.password.message}</span>}
               <Button className='bg-[#13E3FF] w-full text-black hover:bg-[#13E3FF]/70' type="submit" disabled={isLoading}>

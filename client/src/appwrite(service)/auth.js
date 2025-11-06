@@ -1,4 +1,4 @@
-import { Client, Account, ID, OAuthProvider, Databases, Permission, Role } from "appwrite";
+import { Client, Account, ID, OAuthProvider, Databases} from "appwrite";
 import { conf } from "../config/conf.js";
 
 export class AuthService{
@@ -40,37 +40,7 @@ export class AuthService{
 
     async getCurrentUser() {
         try {
-            const user = await this.account.get();            
-            try {
-                await this.databases.getDocument(
-                    conf.appwriteDatabaseId,
-                    conf.appwriteUsersCollectionId,
-                    user.$id //making this transaction idempotent
-                );
-                // If getDocument succeeds, the user document already exists
-            } catch (error) {
-                if (error.code === 404) { 
-                    await this.databases.createDocument(
-                        conf.appwriteDatabaseId,
-                        conf.appwriteUsersCollectionId,
-                        user.$id,
-                        {
-                            userId: user.$id,
-                            email: user.email,
-                            status: user.emailVerification,
-                            joined: new Date().toISOString()
-                        },
-                        [
-                            Permission.read(Role.user(user.$id)),
-                            Permission.update(Role.user(user.$id)),
-                            Permission.delete(Role.user(user.$id))
-                        ]
-                    );
-                } else {
-                    console.error("Error checking/creating user document:", error);
-                    throw error;
-                }
-            }
+            const user = await this.account.get();
             return user;
         } catch (error) {
             console.error("Appwrite error in getting user:", error);
