@@ -6,13 +6,15 @@ RAG (Rapid Answer Generator) is an intelligent web application designed to trans
 
 ## ✨ Features
 
-*   **Intelligent Document Analysis**: Upload multiple PDF documents, and RAG will process them to create a comprehensive knowledge base.
-*   **Contextual Q&A**: Ask questions related to your uploaded documents and get accurate, summarized answers.
-*   **Voice Search**: Interact with RAG using your voice for a hands-free, intuitive querying experience.
-*   **Gemini Integration**: Leverages Google Gemini API for powerful language model capabilities, providing intelligent responses even without document context.
-*   **Conversation History**: Keeps track of your past conversations, allowing you to revisit and continue discussions.
-*   **Secure Authentication**: User authentication powered by Appwrite, including Google OAuth for easy sign-in.
-*   **Responsive UI**: Built with React and Tailwind CSS for a seamless experience across devices.
+*   **Advanced PDF Processing**: Upload up to two PDF documents (max 5MB each). The system automatically detects and performs OCR on scanned PDFs using `ocrmypdf` to ensure text is always extractable.
+*   **Retrieval-Augmented Generation (RAG)**: Documents are chunked, vectorized using Google's embeddings, and stored in a ChromaDB vector store for efficient similarity searches.
+*   **Context-Aware Chat**: Ask questions and receive answers based on the content of your uploaded documents. The conversation history is used to maintain context.
+*   **Gemini Fallback**: If an answer isn't found within the provided documents, the app seamlessly queries the powerful Google Gemini model for a general knowledge response.
+*   **Voice-to-Text Input**: Use the built-in voice search to ask questions hands-free, powered by the browser's Speech Recognition API.
+*   **Secure User Authentication**: Robust authentication system with Appwrite, supporting both email/password and Google OAuth for quick and secure access.
+*   **Conversation Management**: View, revisit, and delete past conversations. Your chat history is saved and linked to your user account.
+*   **Usage Limits**: Implements a daily prompt limit per user to manage resource consumption, which resets every 24 hours.
+*   **Fully Responsive UI**: A sleek and modern interface built with React, Tailwind CSS, and shadcn/ui that works beautifully on desktop and mobile devices.
 
 ## 🛠️ Tech Stack
 
@@ -20,34 +22,35 @@ The application is built with a modern, full-stack architecture, leveraging powe
 
 ### Frontend
 
-*   **Framework**: [React.js](https://reactjs.org/) for building a dynamic and responsive user interface.
-*   **Build Tool**: [Vite](https://vitejs.dev/) for a fast development experience and optimized builds.
-*   **Styling**: [Tailwind CSS](https://tailwindcss.com/) for utility-first styling.
-*   **UI Components**: [shadcn/ui](https://ui.shadcn.com/) for pre-built, accessible, and customizable components.
-*   **State Management**: [Redux Toolkit](https://redux-toolkit.js.org/) for managing global application state.
-*   **Routing**: [React Router DOM](https://reactrouter.com/) for client-side navigation.
-*   **Icons**: [Lucide React](https://lucide.dev/) for a comprehensive icon library.
+*   **Framework**: React.js
+*   **Build Tool**: Vite
+*   **Styling**: Tailwind CSS
+*   **UI Components**: shadcn/ui
+*   **State Management**: Redux Toolkit
+*   **Routing**: React Router DOM
+*   **Icons**: Lucide React
 
 ### Backend
 
-*   **Server**: [Flask](https://flask.palletsprojects.com/) (Python) for handling API requests, document processing, and AI interactions.
-*   **BaaS (Backend as a Service)**: [Appwrite](https://appwrite.io/) for user authentication and database management.
-*   **AI/RAG Framework**: [LangChain](https://www.langchain.com/) (Python) for orchestrating Retrieval-Augmented Generation workflows.
-*   **AI Model**: [Google Gemini API](https://ai.google.dev/) for powerful language model capabilities.
-*   **Vector Database**: [ChromaDB](https://www.trychroma.com/) for efficient storage and retrieval of document embeddings.
-*   **PDF Processing**: [PyPDFLoader](https://python.langchain.com/docs/integrations/document_loaders/pypdf) and `ocrmypdf` for extracting text from PDF documents, including scanned ones.
+*   **Server**: Flask (Python)
+*   **BaaS (Backend as a Service)**: Appwrite
+*   **AI/RAG Framework**: LangChain (Python)
+*   **AI Model**: Google Gemini API
+*   **Vector Database**: ChromaDB
+*   **PDF Processing**: PyPDFLoader & `ocrmypdf`
 
 ## 🏗️ Architecture
 
 Below is a high-level overview of the RAG application's architecture:
 
-![RAG Architecture Diagram](https://example.com/path/to/your/architecture-diagram.png)
+![RAG Architecture Diagram](./client/public/RAG%20architecture.png)
 
 ## 📺 Demo Video
 
 Watch a quick demonstration of RAG in action, from setting up to querying your documents:
 
-[![RAG Demo Video](https://img.youtube.com/vi/YOUR_VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+[![RAG Demo Video](./client/public/DemoIcon.png)](https://screenrec.com/share/U7RV108Ovx)
+
 
 ## 🚀 Getting Started
 
@@ -78,10 +81,12 @@ cd server
 Create a Python virtual environment and activate it:
 
 ```bash
-python -m venv venv
 # On Windows
+python -m venv venv
 .\venv\Scripts\activate
+
 # On macOS/Linux
+python3 -m venv venv
 source venv/bin/activate
 ```
 
@@ -91,64 +96,63 @@ Install the required Python packages:
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in the `server` directory based on `server/.env.sample` and fill in your credentials:
+Create a `.env` file in the `server` directory by copying `.env.sample` and fill in your credentials:
 
 ```
 # server/.env
-APPWRITE_PROJECT_ID=YOUR_APPWRITE_PROJECT_ID
-APPWRITE_API_KEY=YOUR_APPWRITE_API_KEY
-APPWRITE_DB_ID=YOUR_APPWRITE_DATABASE_ID
-APPWRITE_CONVERSATIONS_COLL_ID=YOUR_APPWRITE_CONVERSATIONS_COLLECTION_ID
-APPWRITE_MESSAGES_COLL_ID=YOUR_APPWRITE_MESSAGES_COLLECTION_ID
-GOOGLE_API_KEY=YOUR_GOOGLE_GEMINI_API_KEY
+FRONTEND_URL="http://localhost:5173"
+VITE_APPWRITE_ENDPOINT="https://cloud.appwrite.io/v1"
+VITE_APPWRITE_PROJECT_ID="YOUR_APPWRITE_PROJECT_ID"
+VITE_APPWRITE_API_KEY="YOUR_APPWRITE_API_KEY"
+VITE_APPWRITE_DATABASE_ID="YOUR_APPWRITE_DATABASE_ID"
+VITE_APPWRITE_CONVERSATIONS_COLL_ID="YOUR_CONVERSATIONS_COLLECTION_ID"
+VITE_APPWRITE_MESSAGES_COLL_ID="YOUR_MESSAGES_COLLECTION_ID"
+VITE_APPWRITE_USER_LIMITS_COLL_ID="YOUR_USER_LIMITS_COLLECTION_ID"
+GOOGLE_API_KEY="YOUR_GOOGLE_GEMINI_API_KEY"
 ```
 
 Run the Flask server:
 
 ```bash
 flask run
-
-python -m flask run
 ```
 The backend server will typically run on `http://127.0.0.1:5000`.
 
 ### 3. Frontend Setup (React Vite)
 
-Open a new terminal, navigate to the `client` directory:
+Open a new terminal and navigate to the `client` directory:
 
 ```bash
-cd ../client
+cd client
 ```
 
 Install the Node.js dependencies:
 
 ```bash
 npm install
-
-yarn install
 ```
 
-Create a `.env` file in the `client` directory based on `client/.env.sample` and fill in your credentials:
+Create a `.env` file in the `client` directory by copying `.env.sample` and fill in your credentials:
 
 ```
 # client/.env
-VITE_APPWRITE_PROJECT_ID=YOUR_APPWRITE_PROJECT_ID
-VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1 # Or your custom Appwrite endpoint
-VITE_APPWRITE_DATABASE_ID=YOUR_APPWRITE_DATABASE_ID
-VITE_APPWRITE_COLLECTION_ID=YOUR_APPWRITE_COLLECTION_ID # This might be for a specific collection, verify its usage
-VITE_GOOGLE_OAUTH_CLIENT_ID=YOUR_GOOGLE_OAUTH_CLIENT_ID
-VITE_EMAIL_ADDRESS=YOUR_CONTACT_EMAIL
-BASE_URL=http://localhost:5173
+VITE_APPWRITE_PROJECT_ID="YOUR_APPWRITE_PROJECT_ID"
+VITE_APPWRITE_ENDPOINT="https://cloud.appwrite.io/v1"
+VITE_APPWRITE_DATABASE_ID="YOUR_APPWRITE_DATABASE_ID"
+VITE_APPWRITE_USERS_COLL_ID="YOUR_USERS_COLLECTION_ID"
+VITE_APPWRITE_USER_LIMITS_COLL_ID="YOUR_USER_LIMITS_COLLECTION_ID"
+VITE_GOOGLE_OAUTH_CLIENT_ID="YOUR_GOOGLE_OAUTH_CLIENT_ID"
+VITE_EMAIL_ADDRESS="your-contact-email@example.com"
+VITE_BACKEND_URL="http://127.0.0.1:5000"
+VITE_BASE_URL="http://localhost:5173"
 ```
 
 Start the React development server:
 
 ```bash
 npm run dev
-
-yarn dev
 ```
-The frontend application will typically open in your browser.
+The frontend application will open in your browser at `http://localhost:5173`.
 
 ## 🤝 Contributing
 
@@ -160,8 +164,3 @@ We welcome contributions to the RAG project! If you have suggestions, bug report
 4.  Commit your changes (`git commit -m 'Add new feature'`).
 5.  Push to the branch (`git push origin feature/your-feature-name`).
 6.  Open a Pull Request.
-
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
