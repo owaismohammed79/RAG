@@ -250,9 +250,9 @@ export default function ChatInterface() {
                 finalBotText += data.content;
                 break;
 
-              case "fallback_start":
-                setStreamingResponse("");
-                finalBotText = "";
+              case 'fallback_start':
+                setStreamingResponse(data.content); 
+                finalBotText = data.content;
                 break;
 
               case "fallback_chunk":
@@ -359,35 +359,6 @@ export default function ChatInterface() {
           </Alert>
         )}
 
-        {/* <main className="flex-1 p-4 overflow-y-auto pb-24 md:pb-4">
-          <div className="max-w-3xl mx-auto">
-            {messages.map((message, index) => (
-              <div key={index} className={`mb-4 flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`p-4 rounded-lg max-w-lg ${message.type === 'user' ? 'bg-cyan-600' : 'bg-gray-700'}`}>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code({ node, inline, className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        return !inline && match ? (
-                          <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        ) : (
-                          <code className="bg-gray-800 rounded px-1" {...props}>{children}</code>
-                        );
-                      },
-                    }}>
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            ))}
-            {isLoading && <ProcessingAnimation />}
-            <div ref={chatEndRef} />
-          </div>
-        </main> */}
-
         <main className="flex-1 p-4 overflow-y-auto pb-24 md:pb-4">
           <div className="max-w-3xl mx-auto">
             {messages.map((message, index) => (
@@ -430,7 +401,6 @@ export default function ChatInterface() {
               </div>
             ))}
 
-            {/* It renders the live streaming text in a bot message bubble */}
             {streamingResponse && (
               <div className="mb-4 flex justify-start">
                 <div className="p-4 rounded-lg max-w-lg bg-gray-700">
@@ -461,9 +431,7 @@ export default function ChatInterface() {
                 </div>
               </div>
             )}
-            {/* --- END OF NEW BLOCK --- */}
 
-            {/* Updated loading indicator: only show if loading AND not yet streaming */}
             {isLoading && !streamingResponse && <ProcessingAnimation />}
 
             <div ref={chatEndRef} />

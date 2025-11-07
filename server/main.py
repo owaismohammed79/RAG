@@ -270,9 +270,9 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
 
         if "Answer is not available in the context" in rag_response_buffer:
             print("RAG context not found. Switching to fallback stream")
-            
+            prefix = "Couldn't find answer in context provided.\nResponse from Gemini:\n"
             # Send a special event to tell the frontend to clear its text as context was unavailable
-            yield json.dumps({"type": "fallback_start"}) + "\n"
+            yield json.dumps({"type": "fallback_start", "content": prefix}) + "\n"
 
             fallback_prompt = f"""
             Previous conversation:
