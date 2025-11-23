@@ -116,7 +116,7 @@ export default function ChatInterface() {
 
   useEffect(() => {
     const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+      globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setBrowserSupport({
         supported: false,
@@ -245,19 +245,9 @@ export default function ChatInterface() {
 
             // This handles the different JSON events
             switch (data.type) {
-              case "rag_chunk":
-                setStreamingResponse((prev) => prev + data.content);
-                finalBotText += data.content;
-                break;
-
               case 'fallback_start':
                 setStreamingResponse(data.content); 
                 finalBotText = data.content;
-                break;
-
-              case "fallback_chunk":
-                setStreamingResponse((prev) => prev + data.content);
-                finalBotText += data.content;
                 break;
 
               case "metadata":
@@ -271,6 +261,10 @@ export default function ChatInterface() {
               case "error":
                 finalBotText += `\n\nSorry, an error occurred: ${data.content}`;
                 break;
+
+              default:
+                setStreamingResponse((prev) => prev + data.content);
+                finalBotText += data.content;
             }
           } catch (error) {
             console.error("Failed to parse JSON line:", line, error);
@@ -376,7 +370,7 @@ export default function ChatInterface() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      code({ node, inline, className, children, ...props }) {
+                      code({ inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
                           <SyntaxHighlighter
@@ -407,7 +401,7 @@ export default function ChatInterface() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      code({ node, inline, className, children, ...props }) {
+                      code({ inline, className, children, ...props }) {
                         const match = /language-(\w+)/.exec(className || "");
                         return !inline && match ? (
                           <SyntaxHighlighter
