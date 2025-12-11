@@ -1,4 +1,4 @@
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 import stat
 from tenacity import retry, wait_exponential, stop_after_attempt
@@ -233,11 +233,12 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
     rag_response_buffer = ""
     
     context = "\n\n".join([doc.page_content for doc in context_documents])
+    logger.info("Relevant context extracted")
     history_str_prompt = ""
     for message in history:
         role = "User" if message.get('type') == 'user' else "bot"
         history_str_prompt += f"{role}: {message.get('content')}\n"
-
+    logger.info("Appended relevant context")
     try:
         rag_prompt = f"""
         You are an expert RAG assistant that answers questions based on the provided documents and previous conversation. Provide a detailed answer to the question based on the following context.
@@ -255,9 +256,10 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
 
         Answer:
         """ 
-        
+        logger.info("LLM call starting")
         model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.3)
-        
+        logger.info("LLM call done")
+
         print("Starting RAG stream...")
         rag_stream = model.stream(rag_prompt)
         
@@ -267,6 +269,7 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
                 rag_response_buffer += chunk_content
                 # Sending a JSON event for each RAG chunk
                 yield json.dumps({"type": "rag_chunk", "content": chunk_content}) + "\n"
+        logger.info("Normal chunks sent")
 
         if "Answer is not available in the context" in rag_response_buffer:
             print("RAG context not found. Switching to fallback stream")
@@ -283,8 +286,10 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
 
             Answer:
             """
+            logger.info("Fallback starting")
             fallback_model = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.7)
             fallback_stream = fallback_model.stream(fallback_prompt)
+            logger.info("LLM starts fallback streaming")
 
             fallback_buffer = ""
             for chunk in fallback_stream:
@@ -292,6 +297,7 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
                 if chunk_content:
                     fallback_buffer += chunk_content
                     yield json.dumps({"type": "fallback_chunk", "content": chunk_content}) + "\n"
+            logger.info("Fallback stream done")
             
             # Final answer to save in db
             final_answer_for_db = "Couldn't find answer in context provided.\nResponse from Gemini:\n" + fallback_buffer
@@ -318,6 +324,7 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
                     Permission.delete(Role.user(user_id)),
                 ]
             )
+            logger.info("Answer saved to db")
             print("Final answer saved to DB")
         except Exception as e:
             print(f"Error saving bot message after stream: {e}")

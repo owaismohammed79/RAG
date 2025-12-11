@@ -20,8 +20,13 @@ from dotenv import load_dotenv
 import json
 from datetime import datetime, date
 import traceback
+import logging
 
 load_dotenv()
+
+# Initialize logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": os.getenv("FRONTEND_URL")}})
@@ -112,7 +117,7 @@ def process_documents_without_voice(user):
             queries=[Query.equal('userId', user_id)]
         )
         user_limit_doc = user_limit_docs['documents'][0] if user_limit_docs['documents'] else None
-
+        logging.info("User limit found")
         if user_limit_doc:
             last_reset_date = user_limit_doc.get('lastResetDate')
             prompt_count = user_limit_doc.get('promptCount', 0)
@@ -123,6 +128,7 @@ def process_documents_without_voice(user):
                     {'promptCount': 1, 'lastResetDate': today_str}
                 )
                 prompts_remaining = MAX_PROMPTS_PER_DAY - 1
+                logging.info("prompt limit found")
             else:
                 if prompt_count >= MAX_PROMPTS_PER_DAY:
                     return jsonify({'error': f'Daily prompt limit of {MAX_PROMPTS_PER_DAY} reached. Please try again tomorrow.'}), 429
@@ -174,7 +180,7 @@ def process_documents_without_voice(user):
             )
         except Exception as e:
             print(f"Error updating lastMessageAt for conversation {conversation_id}: {e}")
-
+        logging.info("Conversation created")
     try:
         databases.create_document(
             db_id, msg_collection_id, ID.unique(),
@@ -183,25 +189,24 @@ def process_documents_without_voice(user):
                 'senderType': 'user', 
                 'content': user_prompt,
                 'timestamp': current_timestamp
-            },
-            permissions=[
-                Permission.read(Role.user(user_id)),
-                Permission.update(Role.user(user_id)),
-                Permission.delete(Role.user(user_id)),
-            ]
+            }
         )
+        logging.info("User message saved")
     except Exception as e:
         print(f"Error saving user message: {e}")
 
     try:
         if files:
             documents = load_documents(files)
+            logger.info("File loaded")
             chunks = split_documents(documents)
+            logger.info("File split into chunks")
             for chunk in chunks:
                 chunk.metadata['user_id'] = user_id
                 chunk.metadata['conversation_id'] = conversation_id
             
             chunks_with_ids = calculate_chunk_ids(chunks)
+            logging.info("meta-data appended")
             
             batch_size = 5
             for i in range(0, len(chunks_with_ids), batch_size):
@@ -222,8 +227,10 @@ def process_documents_without_voice(user):
                 {'conversation_id': conversation_id}
             ]
         }
+        logger.info("Started retrieving relevant docs")
         retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
         docs = retriever.invoke(user_prompt)
+        logger.info("Relevant docs found")
         context_documents = docs if docs else []
 
     except Exception as e:
@@ -232,6 +239,7 @@ def process_documents_without_voice(user):
         return jsonify({'error': f'An internal server error occurred during document processing: {str(e)}'}), 500
 
     try:
+        logging.info("Streaming started")
         stream_generator = generate_stream(
             user_id=user_id,
             conversation_id=conversation_id,
@@ -245,6 +253,7 @@ def process_documents_without_voice(user):
         
         # We must send convoID n prompts at the end, so create a new generator to chain them
         def final_stream_with_metadata():
+            logger.info("Data streaming done, starting with metadata streaming")
             # First, yield everything from the AI generator
             yield from stream_generator
             
