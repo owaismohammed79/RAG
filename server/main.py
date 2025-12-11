@@ -1,4 +1,4 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import stat
 from tenacity import retry, wait_exponential, stop_after_attempt
