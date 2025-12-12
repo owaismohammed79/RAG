@@ -20,8 +20,9 @@ from datetime import datetime
 from appwrite.id import ID
 from appwrite.permission import Permission
 from appwrite.role import Role
-# import logging
-# logging.basicConfig(level=logging.DEBUG)
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
 
 load_dotenv()
 CHROMA_PATH="chroma"
@@ -317,12 +318,7 @@ def generate_stream(user_id, conversation_id, user_question, context_documents, 
                     'senderType': 'bot', 
                     'content': final_answer_for_db,
                     'timestamp': datetime.now().isoformat()
-                },
-                permissions=[
-                    Permission.read(Role.user(user_id)),
-                    Permission.update(Role.user(user_id)),
-                    Permission.delete(Role.user(user_id)),
-                ]
+                }
             )
             logger.info("Answer saved to db")
             print("Final answer saved to DB")
