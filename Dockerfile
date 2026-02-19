@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
-
+RUN pip install uv
 COPY server/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --no-cache-dir -r requirements.txt
 COPY server/ .

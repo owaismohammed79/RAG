@@ -59,6 +59,7 @@ export default function ChatInterface() {
   });
   const [promptsRemaining, setPromptsRemaining] = useState(null);
   const [maxPrompts, setMaxPrompts] = useState(10);
+  const abortControllerRef = useRef(null);
   const isSendDisabled =
     isLoading || (promptsRemaining !== null && promptsRemaining <= 0);
 
@@ -188,29 +189,37 @@ export default function ChatInterface() {
     setIsLoading(true);
     const userMessage = { type: "user", content: input };
     dispatch(addMessage(userMessage));
+    const currentInput = input;
+    const currentFiles = files;
+    setInput("");
+    setFiles([]); 
+    setStreamingResponse("");
 
     const formData = new FormData();
-    files.forEach((file) => formData.append("file", file));
-    formData.append("prompt", input);
+    currentFiles.forEach((file) => formData.append("file", file));
+    formData.append("prompt", currentInput);
     formData.append("conversationId", activeConversationId || "null");
 
     //sliding window of last 5 pairs (10 messages)
     const history = messages.slice(-10);
     formData.append("history", JSON.stringify(history));
 
-    setInput("");
-    setFiles([]); //clear files after submission
-    setStreamingResponse("");
-
     try {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+
       const res = await fetch(`${conf.BackendURL}/api/prompt/text-file`, {
         method: "POST",
         body: formData,
         headers: { Authorization: `Bearer ${jwt}` },
+        signal: abortControllerRef.current.signal
       });
 
       if (!res.ok) {
         const data = await res.json();
+        setInput(currentInput); 
+        setFiles(currentFiles);
+        
         if (res.status === 429) {
           dispatch(addMessage({ type: "bot", content: data.error }));
           setPromptsRemaining(0);
@@ -245,6 +254,12 @@ export default function ChatInterface() {
 
             // This handles the different JSON events
             switch (data.type) {
+              case 'rag_chunk':
+              case 'fallback_chunk':
+                setStreamingResponse((prev) => prev + data.content);
+                finalBotText += data.content;
+                break;
+
               case 'fallback_start':
                 setStreamingResponse(data.content); 
                 finalBotText = data.content;
@@ -255,16 +270,12 @@ export default function ChatInterface() {
                   dispatch(setConversationId(data.conversationId));
                   dispatch(fetchConversations(jwt));
                 }
-                setPromptsRemaining(data.promptsRemaining);
+                if(data.promptsRemaining !== undefined) setPromptsRemaining(data.promptsRemaining);
                 break;
 
               case "error":
                 finalBotText += `\n\nSorry, an error occurred: ${data.content}`;
                 break;
-
-              default:
-                setStreamingResponse((prev) => prev + data.content);
-                finalBotText += data.content;
             }
           } catch (error) {
             console.error("Failed to parse JSON line:", line, error);
@@ -278,16 +289,22 @@ export default function ChatInterface() {
       }
       setStreamingResponse("");
     } catch (error) {
-      console.error("Error fetching streaming response:", error);
-      dispatch(
-        addMessage({
+      if (error.name === 'AbortError') {
+        console.log("Request aborted");
+      } else {
+        console.error("Streaming Error:", error);
+        setInput(currentInput);
+        setFiles(currentFiles);
+        dispatch(addMessage({
           type: "bot",
           content: `Sorry, an error occurred: ${error.message}`,
-        })
-      );
+        }));
+      }
       setStreamingResponse("");
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
     }
-    setIsLoading(false);
   };
 
   const handleLogout = async () => {
