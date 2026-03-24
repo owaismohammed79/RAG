@@ -4,6 +4,7 @@ import os
 from tenacity import retry, wait_exponential, stop_after_attempt
 
 CHROMA_PATH = "chroma"
+_vector_store = None
 
 @retry(wait=wait_exponential(multiplier=2, min=5, max=60), stop=stop_after_attempt(5))
 def add_documents_with_retry(db, batch, ids):
@@ -17,6 +18,13 @@ def get_embedding_function():
 
 def get_vector_store():
     """Get or create vector store instance"""
-    embeddings = get_embedding_function()
-    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-    return db
+    global _vector_store
+
+    if _vector_store is None:
+        embeddings = get_embedding_function()
+        _vector_store = Chroma(
+            persist_directory=CHROMA_PATH,
+            embedding_function=embeddings
+        )
+
+    return _vector_store

@@ -12,4 +12,5 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY server/requirements.txt .
 RUN uv pip install --no-cache-dir -r requirements.txt
 COPY server/ .
-CMD ["sh", "-c", "gunicorn --worker-class gevent --bind 0.0.0.0:$PORT --timeout 120 app:app"]
+RUN mkdir -p chroma
+CMD ["sh", "-c", "gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:$PORT --timeout 120 app:app"]

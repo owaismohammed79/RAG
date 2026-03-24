@@ -264,12 +264,15 @@ def process_documents_without_voice(user):
                 {'conversation_id': conversation_id}
             ]
         }
-        
-        logger.info("Started retrieving relevant docs")
+        logger.info("Initializing vector store")
         db = get_vector_store()
-        retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
-        docs = retriever.invoke(user_prompt)
-        logger.info("Relevant docs found")
+        logger.info("Vector store initialized")
+        logger.info("Started retrieving relevant docs")
+        
+        if files:
+            retriever = db.as_retriever(search_kwargs={'k': 15, 'filter': search_filter})
+            docs = retriever.invoke(user_prompt)
+            logger.info("Relevant docs found")
         
         context_documents = docs if docs else []
         
