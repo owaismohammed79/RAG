@@ -6,6 +6,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.schema.document import Document
 import re
 import logging
+import hashlib
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -149,8 +151,41 @@ def calculate_chunk_ids(chunks):
         chunk_id = f"{current_page_id}:{current_chunk_index}"
         last_page_id = current_page_id
         chunk.metadata["id"] = chunk_id
-        
+    
     return chunks
+
+
+def compute_sha256_from_stream(stream):
+    """Compute SHA256 for file like stream; restores pointer to start"""
+    pos = stream.tell()
+    stream.seek(0)
+    sha = hashlib.sha256()
+    for block in iter(lambda: stream.read(8192), b''):
+        sha.update(block)
+    stream.seek(0)
+    return sha.hexdigest()
+
+
+def compute_chunk_hash(text: str) -> str:
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def build_chunk_records(chunks, file_hash, user_id, conversation_id, document_id):
+    """Convert langchain chunks to DB rows with hashes"""
+    records = []
+    for ch in chunks:
+        chunk_text = ch.page_content
+        chunk_hash = compute_chunk_hash(chunk_text)
+        records.append({
+            'chunkId': ch.metadata.get("id"),
+            'documentId': document_id,
+            'conversationId': conversation_id,
+            'userId': user_id,
+            'fileHash': file_hash,
+            'chunkHash': chunk_hash,
+            'text': chunk_text
+        })
+    return records
 
 def prioritize_chunks(chunks, user_prompt):
     """Reorder chunks based on relevance to user prompt"""
