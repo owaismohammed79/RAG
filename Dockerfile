@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 RUN pip install uv && uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV CHROMA_PATH=/app/chroma
 COPY server/requirements.txt .
 RUN uv pip install --no-cache-dir -r requirements.txt
 COPY server/ .
-RUN mkdir -p chroma
-CMD ["sh", "-c", "gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:$PORT --timeout 120 app:app"]
+RUN mkdir -p $CHROMA_PATH
+CMD ["sh", "-c", "gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --max-requests 200 --max-requests-jitter 20 app:app"]
