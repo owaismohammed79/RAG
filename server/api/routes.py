@@ -16,16 +16,25 @@ from .documents import (
     compute_sha256_from_stream,
     build_chunk_records,
 )
-from .vector_store import get_vector_store, reset_vector_store, CHROMA_PATH
+from .vector_store import get_vector_store, reset_vector_store
 from .ai_service import generate_rag_response, generate_fallback_response, save_message_to_db
 from .user_service import get_user_prompt_limit, create_conversation, update_conversation_timestamp
 from .retention import enforce_retention_for_user, prune_document
+from .appwrite_utils import (
+    get_or_create_user_document_id,
+    rel_id,
+    DOC_PENDING,
+    DOC_PROCESSING,
+    DOC_COMPLETED,
+    DOC_FAILED,
+    JOB_PENDING,
+)
 
 logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__)
 
 MAX_FILE_BYTES = int(os.getenv("MAX_FILE_BYTES", str(5 * 1024 * 1024)))  # 5MB default
-MAX_CHUNKS = int(os.getenv("MAX_CHUNKS_PER_DOC", "400"))
+MAX_CHUNKS = int(os.getenv("MAX_CHUNKS_PER_DOC", "70"))
 
 
 def require_admin():
@@ -47,8 +56,8 @@ def create_ingestion_job(user_id, document_id, conversation_id, file_hash):
             "documentId": document_id,
             "conversationId": conversation_id,
             "fileHash": file_hash,
-            "status": "pending",
-            "attempts": 0,
+            "status": JOB_PENDING,
+            "attempts": 1,
             "errorMessage": "",
         },
     )
@@ -124,27 +133,49 @@ def get_messages(user, conversation_id):
 @api.route("/conversations/<conversation_id>", methods=["DELETE"])
 @auth_required
 def delete_conversation(user, conversation_id):
-    """Delete a conversation and its messages"""
-    from app import databases, db_id, msg_collection_id, conv_collection_id
+    from app import databases, db_id, conv_collection_id, msg_collection_id, docs_collection_id, chunks_collection_id, jobs_collection_id
+    from .vector_store import get_vector_store
+    
+    try:
+        conv = databases.get_document(db_id, conv_collection_id, conversation_id)
+        if rel_id(conv.get('userId')) != user['$id']:
+            return jsonify({"error": "Unauthorized"}), 403
+    except Exception:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    #delete pinecone vectors first
+    try:
+        store = get_vector_store()
+        store.delete(filter={'conversation_id': conversation_id})
+    except Exception as e:
+        logger.warning(f"Failed to delete Pinecone vectors for {conversation_id}: {e}")
+
+    def wipe_collection(collection_id):
+        while True:
+            res = databases.list_documents(
+                db_id, collection_id,
+                queries=[Query.equal('conversationId', conversation_id), Query.limit(100)]
+            )
+            docs = res.get('documents', [])
+            if not docs:
+                break
+            for d in docs:
+                databases.delete_document(db_id, collection_id, d['$id'])
 
     try:
-        convo = databases.get_document(db_id, conv_collection_id, conversation_id)
-        if convo["userId"] != user["$id"]:
-            return jsonify({"error": "Unauthorized"}), 403
+        wipe_collection(chunks_collection_id)
+        wipe_collection(jobs_collection_id)
+        wipe_collection(docs_collection_id)
+        wipe_collection(msg_collection_id)
+    except Exception as e:
+        logger.error(f"Failed cleaning child collections for conv {conversation_id}: {e}")
 
-        messages_to_delete = databases.list_documents(
-            db_id, msg_collection_id, queries=[Query.equal("conversationId", conversation_id)]
-        )
-
-        for msg in messages_to_delete["documents"]:
-            databases.delete_document(db_id, msg_collection_id, msg["$id"])
-
+    try:
         databases.delete_document(db_id, conv_collection_id, conversation_id)
-        return jsonify({"message": "Conversation and associated messages deleted successfully"}), 200
+        return jsonify({"success": True, "message": "Conversation and all orphans wiped completely"})
     except Exception as e:
         logger.error(f"Error deleting conversation: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 @api.route("/documents/upload", methods=["POST"])
 @auth_required
@@ -156,6 +187,11 @@ def upload_documents(user):
         conv_collection_id,
         docs_collection_id,
         chunks_collection_id,
+        users_collection_id,
+    )
+
+    users_doc_id = get_or_create_user_document_id(
+        databases, db_id, users_collection_id, user["$id"], user.get("email")
     )
 
     files = request.files.getlist("file")
@@ -193,7 +229,6 @@ def upload_documents(user):
             db_id,
             docs_collection_id,
             queries=[
-                Query.equal("userId", user["$id"]),
                 Query.equal("conversationId", conversation_id),
                 Query.equal("fileHash", file_hash),
             ],
@@ -216,25 +251,24 @@ def upload_documents(user):
         chunks_with_ids = calculate_chunk_ids(chunks)
         sorted_chunks = prioritize_chunks(chunks_with_ids, user_question)
 
-        uploaded_at = datetime.now().isoformat()
+        now_iso = datetime.now().isoformat()
         doc_record = databases.create_document(
             db_id,
             docs_collection_id,
             ID.unique(),
             {
-                "userId": user["$id"],
+                "userId": users_doc_id,
                 "conversationId": conversation_id,
                 "fileHash": file_hash,
-                "filename": file.filename,
-                "uploadedAt": uploaded_at,
-                "lastUsedAt": uploaded_at,
-                "status": "pending",
+                "fileName": file.filename,
+                "lastUsedAt": now_iso,
+                "status": DOC_PENDING,
                 "chunkCount": len(sorted_chunks),
             },
         )
 
         chunk_records = build_chunk_records(
-            sorted_chunks, file_hash, user["$id"], conversation_id, doc_record["$id"]
+            sorted_chunks, file_hash, users_doc_id, conversation_id, doc_record["$id"]
         )
         for rec in chunk_records:
             databases.create_document(
@@ -244,10 +278,10 @@ def upload_documents(user):
                 rec,
             )
 
-        create_ingestion_job(user["$id"], doc_record["$id"], conversation_id, file_hash)
+        create_ingestion_job(users_doc_id, doc_record["$id"], conversation_id, file_hash)
         responses.append({"filename": file.filename, "status": "queued"})
 
-    enforce_retention_for_user(user["$id"])
+    enforce_retention_for_user(users_doc_id)
 
     return (
         jsonify(
@@ -259,6 +293,47 @@ def upload_documents(user):
         ),
         202,
     )
+
+
+@api.route("/documents/status", methods=["GET"])
+@auth_required
+def documents_ingestion_status(user):
+    """Poll whether documents for a conversation finished background ingestion."""
+    from app import databases, db_id, docs_collection_id
+
+    conversation_id = request.args.get("conversationId")
+    if not conversation_id:
+        return jsonify({"error": "conversationId is required"}), 400
+
+    try:
+        docs_res = databases.list_documents(
+            db_id,
+            docs_collection_id,
+            queries=[
+                Query.equal("conversationId", conversation_id),
+                Query.limit(100),
+            ],
+        )
+        docs = docs_res.get("documents", [])
+        if not docs:
+            return jsonify({"ready": False, "pending": 0, "failed": 0, "total": 0}), 200
+
+        statuses = [doc.get("status") for doc in docs]
+        pending = sum(1 for s in statuses if s in (DOC_PENDING, DOC_PROCESSING))
+        failed = sum(1 for s in statuses if s == DOC_FAILED)
+        ready = pending == 0 and failed == 0 and all(s == DOC_COMPLETED for s in statuses)
+
+        return jsonify(
+            {
+                "ready": ready,
+                "pending": pending,
+                "failed": failed,
+                "total": len(docs),
+            }
+        ), 200
+    except Exception as e:
+        logger.error(f"Error checking document status: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @api.route("/prompt/text-file", methods=["POST"])
@@ -307,7 +382,7 @@ def process_documents_without_voice(user):
         queries=[
             Query.equal("userId", user_id),
             Query.equal("conversationId", conversation_id),
-            Query.equal("status", "ready"),
+            Query.equal("status", DOC_COMPLETED),
             Query.limit(1),
         ],
     )
@@ -407,41 +482,21 @@ def admin_rebuild():
     data = request.get_json() or {}
     drop_vectors = data.get("dropVectors", False)
 
-    if drop_vectors and os.path.exists(CHROMA_PATH):
-        shutil.rmtree(CHROMA_PATH, ignore_errors=True)
-    reset_vector_store()
+    if drop_vectors:
+        reset_vector_store()
 
     docs_res = databases.list_documents(
-        db_id, docs_collection_id, queries=[Query.equal("status", "ready"), Query.limit(500)]
+        db_id, docs_collection_id, queries=[Query.equal("status", DOC_COMPLETED), Query.limit(500)]
     )
     jobs_created = 0
     for doc in docs_res.get("documents", []):
-        create_ingestion_job(doc["userId"], doc["$id"], doc["conversationId"], doc["fileHash"])
-        databases.update_document(db_id, docs_collection_id, doc["$id"], {"status": "pending"})
+        create_ingestion_job(
+            rel_id(doc.get("userId")),
+            doc["$id"],
+            rel_id(doc.get("conversationId")),
+            doc["fileHash"],
+        )
+        databases.update_document(db_id, docs_collection_id, doc["$id"], {"status": DOC_PENDING})
         jobs_created += 1
 
     return jsonify({"jobsCreated": jobs_created, "droppedVectors": bool(drop_vectors)})
-
-
-@api.route("/admin/stats", methods=["GET"])
-def admin_stats():
-    if not require_admin():
-        return jsonify({"error": "Unauthorized"}), 403
-    from app import databases, db_id, docs_collection_id, chunks_collection_id, jobs_collection_id
-
-    docs_count = databases.list_documents(db_id, docs_collection_id, queries=[Query.limit(1)])["total"]
-    chunks_count = databases.list_documents(db_id, chunks_collection_id, queries=[Query.limit(1)])["total"]
-    jobs_pending = databases.list_documents(
-        db_id, jobs_collection_id, queries=[Query.equal("status", "pending"), Query.limit(1)]
-    )["total"]
-    jobs_running = databases.list_documents(
-        db_id, jobs_collection_id, queries=[Query.equal("status", "running"), Query.limit(1)]
-    )["total"]
-    return jsonify(
-        {
-            "docs": docs_count,
-            "chunks": chunks_count,
-            "jobsPending": jobs_pending,
-            "jobsRunning": jobs_running,
-        }
-    )

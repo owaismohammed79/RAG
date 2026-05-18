@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from appwrite.query import Query
 
 from .vector_store import get_vector_store
+from .appwrite_utils import DOC_COMPLETED, DOC_FAILED, rel_id
 
 DOCS_KEEP = int(os.getenv("DOCS_KEEP_PER_USER", "3"))
 DOCS_MAX_AGE_DAYS = int(os.getenv("DOCS_MAX_AGE_DAYS", "10"))
@@ -15,7 +16,7 @@ def enforce_retention_for_user(user_id):
     try:
         docs_res = databases.list_documents(
             db_id, docs_collection_id,
-            queries=[Query.equal('userId', user_id), Query.equal('status', 'ready'),
+            queries=[Query.equal('userId', user_id), Query.equal('status', DOC_COMPLETED),
                      Query.order_desc('$createdAt'), Query.limit(100)]
         )
         docs = docs_res.get('documents', [])
@@ -55,27 +56,24 @@ def enforce_retention_for_user(user_id):
 
 
 def prune_document(doc_record, reason="manual"):
-    """Delete chroma rows for a document and mark it pruned in DB"""
+    """Delete vectors for a document and mark it pruned in DB"""
     from app import databases, db_id, docs_collection_id, chunks_collection_id
     doc_id = doc_record['$id']
-    user_id = doc_record.get('userId')
+    user_id = rel_id(doc_record.get('userId'))
     try:
         store = get_vector_store()
-        fetched = store.get(where={'document_id': doc_id}, include=['ids'])
-        ids = fetched.get('ids', []) if fetched else []
-        if ids:
-            store.delete(ids=ids)
-        # delete chunk rows to save DB space
+        store.delete(filter={'document_id': doc_id})        
         chunks_res = databases.list_documents(
             db_id, chunks_collection_id,
             queries=[Query.equal('documentId', doc_id), Query.limit(5000)]
         )
         for ch in chunks_res.get('documents', []):
             databases.delete_document(db_id, chunks_collection_id, ch['$id'])
+            
         databases.update_document(
             db_id, docs_collection_id, doc_id,
-            {'status': 'pruned'}
+            {'status': DOC_FAILED}
         )
-        logging.info(f"Pruned document {doc_id} for user {user_id} ({reason}) removed {len(ids)} vectors")
+        logging.info(f"Pruned document {doc_id} for user {user_id} ({reason})")
     except Exception as exc:
         logging.error(f"Failed to prune document {doc_id}: {exc}")
