@@ -3,6 +3,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
+    ocrmypdf \
     ghostscript \
     poppler-utils \
     --no-install-recommends && \
@@ -14,4 +15,4 @@ COPY server/requirements.txt .
 RUN uv pip install --no-cache-dir -r requirements.txt
 COPY server/ .
 RUN mkdir -p $CHROMA_PATH
-CMD ["sh", "-c", "gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --max-requests 200 --max-requests-jitter 20 app:app"]
+CMD ["sh", "-c", "gunicorn --worker-class gthread --workers 1 --threads 4 --bind 0.0.0.0:$PORT --timeout 120 app:app"]

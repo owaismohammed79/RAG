@@ -1,5 +1,3 @@
-from gevent import monkey
-monkey.patch_all()
 from flask import Flask
 from flask_cors import CORS
 import os
@@ -12,7 +10,7 @@ from flask_limiter.util import get_remote_address
 
 load_dotenv()
 
-# Configure basic logging early so startup events are visible on Render
+# basic logging early so startup events are visible on render
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
@@ -45,13 +43,13 @@ def create_app():
     app.docs_collection_id = os.getenv("VITE_APPWRITE_DOCUMENTS_COLL_ID")
     app.chunks_collection_id = os.getenv("VITE_APPWRITE_CHUNKS_COLL_ID")
     app.jobs_collection_id = os.getenv("VITE_APPWRITE_INGESTION_JOBS_COLL_ID")
+    app.users_collection_id = os.getenv("VITE_APPWRITE_USERS_COLL_ID")
 
     from api.routes import api
     app.register_blueprint(api, url_prefix='/api')
 
-    # Make appwrite services available globally
     global databases, db_id, conv_collection_id, msg_collection_id, user_limits_collection_id
-    global docs_collection_id, chunks_collection_id, jobs_collection_id
+    global docs_collection_id, chunks_collection_id, jobs_collection_id, users_collection_id
     databases = app.databases
     db_id = app.db_id
     conv_collection_id = app.conv_collection_id
@@ -60,8 +58,8 @@ def create_app():
     docs_collection_id = app.docs_collection_id
     chunks_collection_id = app.chunks_collection_id
     jobs_collection_id = app.jobs_collection_id
+    users_collection_id = app.users_collection_id
 
-    #Start ingestion worker loop after variables are set
     try:
         from api.ingestion_worker import start_worker_once
         start_worker_once(app)
