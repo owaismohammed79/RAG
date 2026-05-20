@@ -1,21 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  Mic,
-  Send,
-  Upload,
-  MenuIcon,
-  AlertCircle,
-  X,
-  LogOut,
-} from "lucide-react";
+import { Mic, Send, Upload, MenuIcon, AlertCircle, X, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetClose,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ReactMarkdown from "react-markdown";
@@ -23,299 +10,82 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
 import authService from "../appwrite(service)/auth";
-import {
-  addMessage,
-  setConversationId,
-  fetchConversations,
-} from "../redux/convoSlice";
 import { login as reduxLogin, logout as reduxLogout } from "../redux/authSlice";
 import ConversationHistory from "./ConversationHistory";
 import ProcessingAnimation from "./ProcessingAnimation";
-import { conf } from "../config/conf";
+import { useSpeech } from "../hooks/useSpeech";
+import { useChat } from "../hooks/useChat";
 
-const SidebarContent = ({ jwt }) => <ConversationHistory jwt={jwt} />;
+const SidebarContent = () => <ConversationHistory />;
 
 export default function ChatInterface() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
   const { userData, jwt } = useSelector((state) => state.auth);
-  const { activeConversationId, messages } = useSelector(
-    (state) => state.conversation
-  );
+  const { activeConversationId, messages } = useSelector((state) => state.conversation)
   const [input, setInput] = useState("");
-  const [streamingResponse, setStreamingResponse] = useState("");
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  const [isListening, setIsListening] = useState(false);
-  const micRef = useRef(null);
-  const [recognition, setRecognition] = useState(null);
-  const [browserSupport, setBrowserSupport] = useState({
-    supported: true,
-    message: "",
-  });
-  const [promptsRemaining, setPromptsRemaining] = useState(null);
-  const [maxPrompts, setMaxPrompts] = useState(10);
-  const abortControllerRef = useRef(null);
-  const isSendDisabled =
-    isLoading || (promptsRemaining !== null && promptsRemaining <= 0);
+  const { isListening, browserSupport, handleMicClick } = useSpeech((transcript) => setInput(transcript));
+  const { submitChat, isLoading, streamingResponse, promptsRemaining, maxPrompts } = useChat(jwt, activeConversationId, messages);
+  const isSendDisabled = isLoading || (promptsRemaining !== null && promptsRemaining <= 0);
 
   useEffect(() => {
-    const fetchPromptLimit = async () => {
-      if (!jwt) return;
-      try {
-        const response = await fetch(
-          `${conf.BackendURL}/api/user/prompt-limit`,
-          {
-            headers: { Authorization: `Bearer ${jwt}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setPromptsRemaining(data.promptsRemaining);
-          setMaxPrompts(data.maxPrompts);
-        } else {
-          console.error("Failed to fetch prompt limit:", await response.json());
-        }
-      } catch (error) {
-        console.error("Error fetching prompt limit:", error);
-      }
-    };
-    fetchPromptLimit();
-  }, [jwt]);
-
-  useEffect(() => {
+    let isMounted = true;
     const checkUserAndJWT = async () => {
-      if (userData && jwt) {
-        return;
-      }
-
+      if (userData && jwt) return;
       try {
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
           const token = await authService.getJWT();
-          dispatch(reduxLogin({ userData: currentUser, jwt: token.jwt }));
-          localStorage.setItem("userData", JSON.stringify(currentUser));
+          if (isMounted) {
+            dispatch(reduxLogin({ userData: currentUser, jwt: token.jwt }));
+            localStorage.setItem("userData", JSON.stringify(currentUser));
+          }
         } else {
-          console.log("No active Appwrite session");
-          dispatch(reduxLogout());
-          localStorage.clear();
-          navigate("/login");
+          throw new Error("No session");
         }
       } catch (error) {
-        console.error("Authentication check failed:", error);
-        dispatch(reduxLogout());
-        localStorage.removeItem("userData");
-        navigate("/login");
+        if (isMounted) handleLogout();
+        console.log("Error in getting current user:", error.message)
       }
     };
     checkUserAndJWT();
-  }, [dispatch, navigate, userData, jwt]);
-
-  useEffect(() => {
-    const SpeechRecognition =
-      globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setBrowserSupport({
-        supported: false,
-        message: "Speech recognition not supported in this browser.",
-      });
-      return;
-    }
-    const recognitionInstance = new SpeechRecognition();
-    recognitionInstance.continuous = true;
-    recognitionInstance.interimResults = true;
-    recognitionInstance.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((r) => r[0])
-        .map((r) => r.transcript)
-        .join("");
-      setInput(transcript);
-    };
-    recognitionInstance.onstart = () => setIsListening(true);
-    recognitionInstance.onend = () => setIsListening(false);
-    setRecognition(recognitionInstance);
-  }, []);
+    return () => { isMounted = false; };
+  }, [dispatch, userData, jwt]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingResponse]);
 
-  //refetch conversations when a new one is created
-  useEffect(() => {
-    if (jwt && activeConversationId) {
-      dispatch(fetchConversations(jwt));
-    }
-  }, [activeConversationId, dispatch, jwt]);
-
-  const handleMicClick = () => {
-    if (!browserSupport.supported || !recognition) return;
-    isListening ? recognition.stop() : recognition.start();
-  };
-
-  const handleFileChange = (event) => {
-    const selectedFiles = Array.from(event.target.files);
-    if (
-      selectedFiles.some(
-        (file) => file.type !== "application/pdf" || file.size > 5 * 1024 * 1024
-      )
-    ) {
-      alert("Please select only PDF files under 5 MB.");
-      return;
-    }
-    if (selectedFiles.length > 2) {
-      alert("Please select a maximum of 2 files.");
-      return;
-    }
-    setFiles(selectedFiles);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (input.trim() === "" || !jwt) return;
-    if (promptsRemaining !== null && promptsRemaining <= 0) {
-      dispatch(
-        addMessage({
-          type: "bot",
-          content: `You have reached your daily prompt limit of ${maxPrompts}. Please try again tomorrow.`,
-        })
-      );
-      return;
-    }
-
-    setIsLoading(true);
-    const userMessage = { type: "user", content: input };
-    dispatch(addMessage(userMessage));
-    const currentInput = input;
-    const currentFiles = files;
-    setInput("");
-    setFiles([]); 
-    setStreamingResponse("");
-
-    const formData = new FormData();
-    currentFiles.forEach((file) => formData.append("file", file));
-    formData.append("prompt", currentInput);
-    formData.append("conversationId", activeConversationId || "null");
-
-    //sliding window of last 5 pairs (10 messages)
-    const history = messages.slice(-10);
-    formData.append("history", JSON.stringify(history));
-
-    try {
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      abortControllerRef.current = new AbortController();
-
-      const res = await fetch(`${conf.BackendURL}/api/prompt/text-file`, {
-        method: "POST",
-        body: formData,
-        headers: { Authorization: `Bearer ${jwt}` },
-        signal: abortControllerRef.current.signal
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setInput(currentInput); 
-        setFiles(currentFiles);
-        
-        if (res.status === 429) {
-          dispatch(addMessage({ type: "bot", content: data.error }));
-          setPromptsRemaining(0);
-        } else {
-          throw new Error(data.error || "API request failed");
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      // Streaming logic
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalBotText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (line.trim() === "") continue;
-
-          try {
-            const data = JSON.parse(line);
-
-            // This handles the different JSON events
-            switch (data.type) {
-              case 'rag_chunk':
-              case 'fallback_chunk':
-                setStreamingResponse((prev) => prev + data.content);
-                finalBotText += data.content;
-                break;
-
-              case 'fallback_start':
-                setStreamingResponse(data.content); 
-                finalBotText = data.content;
-                break;
-
-              case "metadata":
-                if (!activeConversationId) {
-                  dispatch(setConversationId(data.conversationId));
-                  dispatch(fetchConversations(jwt));
-                }
-                if(data.promptsRemaining !== undefined) setPromptsRemaining(data.promptsRemaining);
-                break;
-
-              case "error":
-                finalBotText += `\n\nSorry, an error occurred: ${data.content}`;
-                break;
-            }
-          } catch (error) {
-            console.error("Failed to parse JSON line:", line, error);
-          }
-        }
-      }
-
-      // Streaming is done, add the complete message to Redux
-      if (finalBotText.trim()) {
-        dispatch(addMessage({ type: "bot", content: finalBotText }));
-      }
-      setStreamingResponse("");
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log("Request aborted");
-      } else {
-        console.error("Streaming Error:", error);
-        setInput(currentInput);
-        setFiles(currentFiles);
-        dispatch(addMessage({
-          type: "bot",
-          content: `Sorry, an error occurred: ${error.message}`,
-        }));
-      }
-      setStreamingResponse("");
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await authService.logout();
-      dispatch(reduxLogout());
-      localStorage.removeItem("userData");
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
+    } catch(e) {
+      console.log("Error in logging out:", e.message)
     }
+    dispatch(reduxLogout());
+    localStorage.clear();
+    navigate("/login");
+  };
+
+  const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    if (selectedFiles.some(f => f.type !== "application/pdf" || f.size > 5242880)) {
+      return alert("Only PDFs under 5MB allowed.");
+    }
+    if (selectedFiles.length > 2) return alert("Max 2 files.");
+    setFiles(selectedFiles);
+  };
+
+  const onSubmit = (e) => {
+    e.preventDefault();
+    if(!input.trim() || !jwt) return;
+    
+    submitChat(input, files, {onClearInput: () => { setInput(""); setFiles([]); }, onRestoreInput: (failedInput, failedFiles) => { setInput(failedInput); setFiles(failedFiles); }, onAuthFailure: handleLogout});
   };
 
   return (
@@ -464,7 +234,7 @@ export default function ChatInterface() {
             </div>
           )}
           <form
-            onSubmit={handleSubmit}
+            onSubmit={onSubmit}
             className="flex items-center gap-2 bg-black/30 rounded-full p-2 max-w-[900px] mx-auto"
           >
             <Button
@@ -477,7 +247,7 @@ export default function ChatInterface() {
               }`}
               disabled={!browserSupport.supported || isSendDisabled}
             >
-              <Mic className="w-6 h-6" ref={micRef} />
+              <Mic className="w-6 h-6" />
             </Button>
             <input
               type="text"
