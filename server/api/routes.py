@@ -340,13 +340,15 @@ def documents_ingestion_status(user):
 @auth_required
 def process_documents_without_voice(user):
     """Chat route; no ingestion occurs here."""
-    from app import databases, db_id, msg_collection_id, conv_collection_id, user_limits_collection_id, docs_collection_id
+    from app import databases, db_id, msg_collection_id, conv_collection_id, user_limits_collection_id, docs_collection_id, users_collection_id
 
     user_id = user["$id"]
     user_prompt = request.form.get("prompt")
     files = request.files.getlist("file")
     conversation_id = request.form.get("conversationId")
     history_str = request.form.get("history", "[]")
+
+    users_doc_id = get_or_create_user_document_id(databases, db_id, users_collection_id, user_id, user.get("email"))
 
     try:
         history = json.loads(history_str)
@@ -380,7 +382,7 @@ def process_documents_without_voice(user):
         db_id,
         docs_collection_id,
         queries=[
-            Query.equal("userId", user_id),
+            Query.equal("userId", users_doc_id), 
             Query.equal("conversationId", conversation_id),
             Query.equal("status", DOC_COMPLETED),
             Query.limit(1),
@@ -390,7 +392,7 @@ def process_documents_without_voice(user):
     context_documents = []
     if docs_ready.get("total", 0) > 0:
         try:
-            search_filter = {"$and": [{"user_id": user_id}, {"conversation_id": conversation_id}]}
+            search_filter = {"user_id": user_id, "conversation_id": conversation_id}
             store = get_vector_store()
             retriever = store.as_retriever(search_kwargs={"k": 5, "filter": search_filter})
             docs = retriever.invoke(user_prompt)

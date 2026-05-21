@@ -60,6 +60,13 @@ def create_app():
     jobs_collection_id = app.jobs_collection_id
     users_collection_id = app.users_collection_id
 
+    #Eager initialize this so that user doesn't have to wait after his first request in chat
+    try:
+        from api.vector_store import get_vector_store
+        get_vector_store()
+    except Exception as init_err:
+        logging.error(f"Failed to eager-load vector store: {init_err}")
+
     try:
         from api.ingestion_worker import start_worker_once
         start_worker_once(app)
