@@ -139,6 +139,7 @@ def delete_conversation(user, conversation_id):
     try:
         conv = databases.get_document(db_id, conv_collection_id, conversation_id)
         if rel_id(conv.get('userId')) != user['$id']:
+            logger.info(f"Unauthorized user")
             return jsonify({"error": "Unauthorized"}), 403
     except Exception:
         return jsonify({"error": "Conversation not found"}), 404
@@ -146,6 +147,7 @@ def delete_conversation(user, conversation_id):
     #delete pinecone vectors first
     try:
         store = get_vector_store()
+        logger.info(f"Vector store retrieved")
         store.delete(filter={'conversation_id': conversation_id})
     except Exception as e:
         logger.warning(f"Failed to delete Pinecone vectors for {conversation_id}: {e}")

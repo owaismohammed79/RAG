@@ -1,15 +1,12 @@
 import { useState } from "react";
 import Logo from "./Logo";
 import { NavLink } from "react-router-dom";
-import { conf } from "../config/conf";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 
 function Navbar() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const emailAddress = conf.emailAddress;
-  const mailtoLink = `mailto:${emailAddress}`;
 
   const handleScroll = (id) => {
     setIsSheetOpen(false); //Close sheet on link click
@@ -25,7 +22,7 @@ function Navbar() {
     <>
       <NavLink to="/" onClick={() => setIsSheetOpen(false)} className="text-white text-lg font-semibold px-2 py-2 md:py-0">Home</NavLink>
       <NavLink to="/#how-it-works" className="text-white text-lg font-semibold px-2 py-2 md:py-0" onClick={() => handleScroll("how-it-works")}>How it works</NavLink>
-      <a href={mailtoLink} onClick={() => setIsSheetOpen(false)} className="text-white text-lg font-semibold px-2 py-2 md:py-0">Contact Us</a>
+      <a href="https://github.com/owaismohammed79/RAG" target="_blank" rel="noopener noreferrer" onClick={() => setIsSheetOpen(false)} className="text-white text-lg font-semibold px-2 py-2 md:py-0">GitHub</a>
       <NavLink to="/signup" onClick={() => setIsSheetOpen(false)} className="text-white text-lg font-semibold px-2 py-2 md:py-0">Sign up</NavLink>
       <NavLink to="/login" onClick={() => setIsSheetOpen(false)} className="text-white text-lg font-semibold px-2 py-2 md:py-0">Log In</NavLink>
     </>

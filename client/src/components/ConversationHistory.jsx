@@ -4,6 +4,7 @@ import { fetchConversations, setActiveConversation, fetchMessages, startNewChat,
 import { logout as reduxLogout} from '../redux/authSlice';
 import { Button } from "@/components/ui/button";
 import { PlusCircle, X, LogOut } from 'lucide-react';
+import { FaGithub } from "react-icons/fa";
 import authService from '../appwrite(service)/auth';
 import {
     AlertDialog,
@@ -124,7 +125,10 @@ const ConversationHistory = () => {
                     ))
                 )}
             </div>
-            <Button onClick={handleLogout} className="flex items-center justify-start gap-2 bg-red-600 hover:bg-red-700 mt-4">
+            <Button className="hidden md:flex items-center justify-start gap-2 bg-gray-500 mt-4" asChild>
+                <a href='https://github.com/owaismohammed79/RAG' target="_blank" rel="noopener noreferrer"><FaGithub className="w-5 h-5"/><span>GitHub</span></a>
+            </Button>
+            <Button onClick={handleLogout} className="hidden md:flex items-center justify-start gap-2 bg-red-600 hover:bg-red-700 ">
                 <LogOut className="w-5 h-5" />
                 <span>Logout</span>
             </Button>

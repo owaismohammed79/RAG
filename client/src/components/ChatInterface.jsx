@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Mic, Send, Upload, MenuIcon, AlertCircle, X, LogOut } from "lucide-react";
+import { FaGithub } from "react-icons/fa";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
@@ -123,14 +124,19 @@ export default function ChatInterface() {
             </SheetContent>
           </Sheet>
           <h1 className="text-lg font-semibold">RAG</h1>
-          <Button
-            onClick={handleLogout}
-            variant="ghost"
-            size="sm"
-            className="text-cyan-400 hover:text-cyan-300"
-          >
-            <LogOut className="w-5 h-5" />
-          </Button>
+          <div className="flex justify-center items-center justify-self-center">
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              size="sm"
+              className="text-cyan-400 hover:text-cyan-300"
+            >
+              <LogOut className="w-5 h-5" />
+            </Button>
+            <Button className="bg-transparent" variant="ghost" size="sm" asChild>
+                <a href='https://github.com/owaismohammed79/RAG' target="_blank" rel="noopener noreferrer"><FaGithub className="w-5 h-5"/></a>
+            </Button>
+          </div>
         </header>
 
         {browserSupport.message && !browserSupport.supported && (
