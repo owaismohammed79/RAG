@@ -2,42 +2,36 @@
 
 ## 🚀 Project Overview
 
-RAG (Rapid Answer Generator) is an intelligent web application designed to transform your PDF documents into a personal, queryable knowledge base. Upload your PDFs, ask questions, and receive precise, context-aware answers instantly. Whether for research, study, or decision-making, RAG empowers you to extract maximum value from your documents efficiently.
+RAG (Rapid Answer Generator) is an intelligent web application designed to transform PDF documents into a queryable knowledge base. Users can upload PDFs, perform optical character recognition (OCR) on scanned files, and ask context-aware questions with instant AI-driven answers. The architecture features background ingestion, retention management, vector embeddings, and full container support.
+
+---
 
 ## ✨ Features
 
-*   **Advanced PDF Processing**: Upload up to two PDF documents (max 5MB each). The system automatically detects and performs OCR on scanned PDFs using `ocrmypdf` to ensure text is always extractable.
-*   **Retrieval-Augmented Generation (RAG)**: Documents are chunked, vectorized using Google's embeddings, and stored in a ChromaDB vector store for efficient similarity searches.
-*   **Context-Aware Chat**: Ask questions and receive answers based on the content of your uploaded documents. The conversation history is used to maintain context.
-*   **Gemini Fallback**: If an answer isn't found within the provided documents, the app seamlessly queries the powerful Google Gemini model for a general knowledge response.
-*   **Voice-to-Text Input**: Use the built-in voice search to ask questions hands-free, powered by the browser's Speech Recognition API.
-*   **Secure User Authentication**: Robust authentication system with Appwrite, supporting both email/password and Google OAuth for quick and secure access.
-*   **Conversation Management**: View, revisit, and delete past conversations. Your chat history is saved and linked to your user account.
-*   **Usage Limits**: Implements a daily prompt limit per user to manage resource consumption, which resets every 24 hours.
-*   **Fully Responsive UI**: A sleek and modern interface built with React, Tailwind CSS, and shadcn/ui that works beautifully on desktop and mobile devices.
+* **Advanced PDF Processing**: Upload PDF documents (up to 2 files, max 5MB each) with automatic text extraction.
+* **OCR Integration**: Performs automated OCR on scanned PDFs using `ocrmypdf` to guarantee text extractability.
+* **Retrieval-Augmented Generation (RAG)**: Text is chunked, converted into vector embeddings via Google's models, and stored in ChromaDB or Pinecone for fast context retrieval.
+* **Background Workers**: Dedicated background worker scripts (`ingestion_worker.py`) and retention policies (`retention.py`) manage asynchronous document processing and cleanup.
+* **Context-Aware Chat & Fallback**: Retains conversation history to answer queries in context, with automatic fallback to Google Gemini for general knowledge questions.
+* **Voice-to-Text Input**: Speech recognition API integration allows hands-free voice search.
+* **Authentication & Usage Limits**: Appwrite BaaS integration supports Email/Password and Google OAuth login while enforcing daily prompt usage limits per user.
+* **Modular Architecture**: Restructured modular Python backend (`server/api/`) organizing authentication, AI services, user management, and vector storage.
+* **Modern Responsive Interface**: React, Vite, Tailwind CSS, and shadcn/ui frontend managed with Redux Toolkit.
+* **Containerization**: Standardized deployment setup provided via a root `Dockerfile`.
+
+---
 
 ## 🛠️ Tech Stack
 
-The application is built with a modern, full-stack architecture, leveraging powerful tools for both the frontend and backend.
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React, Vite, Tailwind CSS, shadcn/ui, Redux Toolkit, React Router DOM, Lucide React |
+| **Backend** | Flask (Python), LangChain, Appwrite Python SDK, Pinecone, PyPDFLoader, `ocrmypdf` |
+| **AI & Embeddings** | Google Gemini API & Google Vector Embeddings |
+| **Services & Workers** | Appwrite BaaS, Ingestion Worker, Retention Service |
+| **DevOps** | Docker |
 
-### Frontend
-
-*   **Framework**: React.js
-*   **Build Tool**: Vite
-*   **Styling**: Tailwind CSS
-*   **UI Components**: shadcn/ui
-*   **State Management**: Redux Toolkit
-*   **Routing**: React Router DOM
-*   **Icons**: Lucide React
-
-### Backend
-
-*   **Server**: Flask (Python)
-*   **BaaS (Backend as a Service)**: Appwrite
-*   **AI/RAG Framework**: LangChain (Python)
-*   **AI Model**: Google Gemini API
-*   **Vector Database**: ChromaDB
-*   **PDF Processing**: PyPDFLoader & `ocrmypdf`
+---
 
 ## 🏗️ Architecture
 
@@ -52,25 +46,61 @@ Watch a quick demonstration of RAG in action, from setting up to querying your d
 [![RAG Demo Video](./client/public/DemoIcon.png)](https://screenrec.com/share/U7RV108Ovx)
 
 
-## 🚀 Getting Started
+## 📁 Project Structure
 
-Follow these instructions to set up and run the RAG application on your local machine.
+```text
+├── Dockerfile
+├── README.md
+├── client/
+│   ├── public/
+│   ├── src/
+│   │   ├── appwrite(service)/
+│   │   ├── components/
+│   │   ├── config/
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   ├── pages/
+│   │   ├── redux/
+│   │   └── utils/
+│   └── package.json
+└── server/
+    ├── api/
+    │   ├── ai_service.py
+    │   ├── appwrite_utils.py
+    │   ├── auth.py
+    │   ├── documents.py
+    │   ├── ingestion_worker.py
+    │   ├── retention.py
+    │   ├── routes.py
+    │   ├── user_service.py
+    │   └── vector_store.py
+    ├── app.py
+    └── requirements.txt
+```
+
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-*   Node.js (v18 or higher)
-*   Python (v3.9 or higher)
-*   npm or Yarn
-*   `ocrmypdf` (install via `pip install ocrmypdf` or your system's package manager)
+* Node.js (v18 or higher)
+* Python (v3.9 or higher)
+* npm or Yarn
+* `ocrmypdf` (installed via `pip install ocrmypdf` or system package manager)
+* Docker (optional, for containerized execution)
+
+---
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/rag-project.git
-cd rag-project
+git clone https://github.com/owaismohammed79/RAG
+cd RAG
 ```
 
-### 2. Backend Setup (Python Flask)
+---
+
+### 2. Backend Setup (Flask Server)
 
 Navigate to the `server` directory:
 
@@ -109,6 +139,8 @@ VITE_APPWRITE_CONVERSATIONS_COLL_ID="YOUR_CONVERSATIONS_COLLECTION_ID"
 VITE_APPWRITE_MESSAGES_COLL_ID="YOUR_MESSAGES_COLLECTION_ID"
 VITE_APPWRITE_USER_LIMITS_COLL_ID="YOUR_USER_LIMITS_COLLECTION_ID"
 GOOGLE_API_KEY="YOUR_GOOGLE_GEMINI_API_KEY"
+PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
+PINECONE_INDEX_NAME="YOUR_PINECONE_INDEX_NAME"
 ```
 
 Run the Flask server:
@@ -116,7 +148,6 @@ Run the Flask server:
 ```bash
 flask run
 ```
-The backend server will typically run on `http://127.0.0.1:5000`.
 
 ### 3. Frontend Setup (React Vite)
 
@@ -152,15 +183,24 @@ Start the React development server:
 ```bash
 npm run dev
 ```
-The frontend application will open in your browser at `http://localhost:5173`.
+
+---
+
+### 4. Docker Deployment
+
+To run the application inside a container:
+
+```bash
+docker build -t rag-application .
+docker run -p 5000:5000 rag-application
+```
+
+---
 
 ## 🤝 Contributing
 
-We welcome contributions to the RAG project! If you have suggestions, bug reports, or want to contribute code, please feel free to:
-
-1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/your-feature-name`).
-3.  Make your changes.
-4.  Commit your changes (`git commit -m 'Add new feature'`).
-5.  Push to the branch (`git push origin feature/your-feature-name`).
-6.  Open a Pull Request.
+1. Fork the repository.
+2. Create a new feature branch (`git checkout -b feature/your-feature-name`).
+3. Commit your changes (`git commit -m 'Add new feature'`).
+4. Push to the branch (`git push origin feature/your-feature-name`).
+5. Open a Pull Request.
