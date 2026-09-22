@@ -1,14 +1,14 @@
-import authService from '../appwrite(service)/auth';
+import authService from '../supabase(service)/auth';
 import { conf } from '../config/conf';
 
 export const apiFetch = async (endpoint, options = {}) => {
   let token;
   
   try {
-    const session = await authService.getJWT()
-    token = session.jwt
+    const session = await authService.getSession();
+    token = session.access_token;
   } catch (error) {
-    console.error("Appwrite session is completely dead:", error)
+    console.error("Supabase session is completely dead:", error)
     throw new Error("AUTH_FAILED")
   }
 

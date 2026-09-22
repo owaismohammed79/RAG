@@ -1,19 +1,7 @@
 from functools import wraps
-from flask import request, jsonify
-from appwrite.client import Client
-from appwrite.services.account import Account
-import os
-
-def get_user_client(jwt_token):
-    """Create a user-specific Appwrite client"""
-    user_client = Client()
-    user_client.set_endpoint(os.getenv("VITE_APPWRITE_ENDPOINT"))
-    user_client.set_project(os.getenv("VITE_APPWRITE_PROJECT_ID"))
-    user_client.set_jwt(jwt_token)
-    return user_client
+from flask import request, jsonify, current_app
 
 def auth_required(f):
-    """Authentication decorator"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
@@ -21,11 +9,20 @@ def auth_required(f):
             return jsonify({'error': 'Missing token'}), 401
         
         try:
-            jwt_token = auth_header.split(' ')[1]
-            user_client = get_user_client(jwt_token)
-            user_account = Account(user_client)
-            user = user_account.get()
-            kwargs['user'] = user
+            token = auth_header.split(' ')[1]
+            supabase = current_app.supabase
+            
+            user_response = supabase.auth.get_user(token)
+            if not user_response or not user_response.user:
+                return jsonify({'error': 'Invalid or expired token'}), 401
+            
+            user = user_response.user
+            kwargs['user'] = {
+                '$id': user.id,
+                'id': user.id,
+                'email': user.email,
+                'emailVerification': user.email_confirmed_at is not None
+            }
         except Exception as e:
             return jsonify({'error': 'Invalid or expired token', 'details': str(e)}), 401
             

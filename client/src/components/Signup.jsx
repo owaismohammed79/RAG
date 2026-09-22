@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {useForm} from 'react-hook-form'
 import { useNavigate, Link } from 'react-router-dom'
-import authService from '../appwrite(service)/auth.js'
+import authService from '../supabase(service)/auth.js'
 import { useState, useEffect } from 'react'
 import {Label} from '../components/ui/label'
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -34,12 +34,12 @@ function Signup({variable}) {
       if (variable === "Sign up") {
         await authService.createAccount({ email: data.email, password: data.password });
       }
-        await authService.login({ email: data.email, password: data.password });
+      await authService.login({ email: data.email, password: data.password });
       
       const currentUser = await authService.getCurrentUser();
       if (currentUser) {
-        const jwt = await authService.getJWT()
-        dispatch(reduxLogin({ userData: currentUser, jwt: jwt.jwt }))
+        const session = await authService.getSession();
+        dispatch(reduxLogin({ userData: currentUser, jwt: session.access_token }))
         localStorage.setItem('userData', JSON.stringify(currentUser))
         navigate('/chat')
       } else {
@@ -57,12 +57,14 @@ function Signup({variable}) {
     setFormError(null);
     setIsLoading(true);
     try {
-      authService.logout();
+      await authService.logout();
       dispatch(reduxLogout());
       localStorage.clear();
       await authService.googleLogin()
     } catch (error) {
       console.error(error)
+    } finally {
+      setIsLoading(false);
     }
   }
 
