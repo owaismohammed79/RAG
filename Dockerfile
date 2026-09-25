@@ -3,9 +3,8 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    ocrmypdf \
     ghostscript \
-    poppler-utils \
+    qpdf \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 RUN pip install uv && uv venv /opt/venv

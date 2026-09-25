@@ -202,22 +202,11 @@ def upload_documents(user):
         doc_record = doc_res.data[0]
 
         chunk_records = build_chunk_records(
-            sorted_chunks, file_hash, user_id, conversation_id, doc_record["id"]
+            sorted_chunks, user_id, conversation_id, doc_record["id"]
         )
-        
-        formatted_chunk_recs = []
-        for rec in chunk_records:
-            formatted_chunk_recs.append({
-                "document_id": doc_record["id"],
-                "conversation_id": conversation_id,
-                "user_id": user_id,
-                "chunk_hash": rec.get("chunkHash"),
-                "text": rec.get("text"),
-                "chunk_index": rec.get("chunkIndex")
-            })
 
-        if formatted_chunk_recs:
-            supabase.table("chunks").insert(formatted_chunk_recs).execute()
+        if chunk_records:
+            supabase.table("chunks").insert(chunk_records).execute()
 
         create_ingestion_job(user_id, doc_record["id"], conversation_id, file_hash)
         responses.append({"filename": file.filename, "status": "queued"})

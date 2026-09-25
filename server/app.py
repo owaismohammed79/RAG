@@ -4,7 +4,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from .api.routes import limiter
+from api.routes import limiter
 
 load_dotenv()
 logging.getLogger("httpx").setLevel(logging.WARNING)

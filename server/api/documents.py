@@ -1,9 +1,9 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
-import tempfile
-import subprocess
-from langchain_community.document_loaders import PyPDFLoader
 from langchain.schema.document import Document
+from langchain_community.document_loaders import PyMuPDFLoader
+import subprocess
+import tempfile
+import os
 import re
 import logging
 import hashlib
@@ -46,7 +46,6 @@ def load_documents(file_array):
     with tempfile.TemporaryDirectory() as tempdir:
         saved_file_paths = []
         
-        #save uploaded files
         for i, file in enumerate(file_array):
             if not hasattr(file, 'filename'):
                 raise ValueError("Invalid file object received")
@@ -58,52 +57,52 @@ def load_documents(file_array):
                 file.save(file_path)
                 saved_file_paths.append(file_path)
             except AttributeError:
-                logger.error("Invalid object file type recieved")
+                logger.error("Invalid object file type received")
         
         for file_path in saved_file_paths:
             documents_for_this_pdf = []
             is_scanned = False
-            total_chars_pypdf = 0
+            total_chars_pymupdf = 0
             
-            #load with pypdf 
+            # load with PyMuPDF 
             try:
-                pypdf_loader = PyPDFLoader(file_path)
-                pypdf_docs = pypdf_loader.load()
-                documents_for_this_pdf.extend(pypdf_docs)
+                pymupdf_loader = PyMuPDFLoader(file_path)
+                pymupdf_docs = pymupdf_loader.load()
+                documents_for_this_pdf.extend(pymupdf_docs)
                 
-                if not pypdf_docs:
-                    logger.info(f"PyPDFLoader found no text for {file_path}, assuming scanned PDF")
+                if not pymupdf_docs:
+                    logger.info(f"PyMuPDFLoader found no text for {file_path}, assuming scanned PDF")
                     is_scanned = True
-                elif len(pypdf_docs) > 0 and (sum(len(doc.page_content) for doc in pypdf_docs) / len(pypdf_docs) < 500):
+                elif len(pymupdf_docs) > 0 and (sum(len(doc.page_content) for doc in pymupdf_docs) / len(pymupdf_docs) < 500):
                     logger.info(f"Low character density for {file_path}, assuming potential scanned PDF")
                     is_scanned = True
                 else:
                     logger.info(f"Loaded {file_path} as a native PDF")
             except Exception as e:
-                logger.error(f"Error with PyPDFLoader for {file_path}: {e}")
+                logger.error(f"Error with PyMuPDFLoader for {file_path}: {e}")
                 is_scanned = True
             
-            #fallback to OCR if pypdf fails
+            # fallback to OCR if PyMuPDF fails
             if is_scanned:
                 ocr_output_path = os.path.join(tempdir, f"ocr_output_{os.path.basename(file_path)}")
                 ocr_successful, ocr_error_message = _run_ocrmypdf(file_path, ocr_output_path, language="eng")
                 
                 if ocr_successful:
                     try:
-                        ocr_loader = PyPDFLoader(ocr_output_path)
+                        ocr_loader = PyMuPDFLoader(ocr_output_path)
                         ocr_docs = ocr_loader.load()
                         total_chars_ocr = sum(len(doc.page_content) for doc in ocr_docs)
-                        total_chars_pypdf = sum(len(doc.page_content) for doc in pypdf_docs) if pypdf_docs else 0
+                        total_chars_pymupdf = sum(len(doc.page_content) for doc in pymupdf_docs) if pymupdf_docs else 0
                         
-                        if total_chars_ocr > total_chars_pypdf * 1.1:
+                        if total_chars_ocr > total_chars_pymupdf * 1.1:
                             logger.info(f"Using OCR'd content for {file_path}")
                             all_documents.extend(ocr_docs)
-                        elif not pypdf_docs and ocr_docs:
-                            logger.info(f"OCR extracted content where pypdf found none for {file_path}")
+                        elif not pymupdf_docs and ocr_docs:
+                            logger.info(f"OCR extracted content where PyMuPDF found none for {file_path}")
                             all_documents.extend(ocr_docs)
-                        elif pypdf_docs and ocr_docs and total_chars_ocr <= total_chars_pypdf * 1.1:
-                            logger.info(f"OCR did not significantly improve content for {file_path}, sticking with original pypdf content")
-                            all_documents.extend(pypdf_docs)
+                        elif pymupdf_docs and ocr_docs and total_chars_ocr <= total_chars_pymupdf * 1.1:
+                            logger.info(f"OCR did not significantly improve content for {file_path}, sticking with original PyMuPDF content")
+                            all_documents.extend(pymupdf_docs)
                         else:
                             if documents_for_this_pdf:
                                 all_documents.extend(documents_for_this_pdf)
@@ -154,7 +153,6 @@ def calculate_chunk_ids(chunks):
     
     return chunks
 
-
 def compute_sha256_from_stream(stream):
     """Compute SHA256 for file like stream; restores pointer to start"""
     pos = stream.tell()
@@ -165,25 +163,30 @@ def compute_sha256_from_stream(stream):
     stream.seek(0)
     return sha.hexdigest()
 
-
 def compute_chunk_hash(text: str) -> str:
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
-
-def build_chunk_records(chunks, file_hash, user_id, conversation_id, document_id):
-    """Convert langchain chunks to DB rows with hashes"""
+def build_chunk_records(chunks, user_id, conversation_id, document_id):
+    """Convert langchain chunks to DB rows with snake case column names"""
     records = []
-    for ch in chunks:
+    for idx, ch in enumerate(chunks):
         chunk_text = ch.page_content
         chunk_hash = compute_chunk_hash(chunk_text)
+        
+        chunk_id = ch.metadata.get("id")
+        if not chunk_id:
+            source = ch.metadata.get("source", "unknown")
+            page = ch.metadata.get("page", 0)
+            chunk_id = f"{source}:{page}:{idx}"
+            
         records.append({
-            'chunkId': ch.metadata.get("id"),
-            'documentId': document_id,
-            'conversationId': conversation_id,
-            'userId': user_id,
-            'fileHash': file_hash,
-            'chunkHash': chunk_hash,
-            'text': chunk_text
+            'chunk_id': chunk_id,
+            'document_id': document_id,
+            'conversation_id': conversation_id,
+            'user_id': user_id,
+            'chunk_hash': chunk_hash,
+            'text': chunk_text,
+            'chunk_index': idx,
         })
     return records
 
