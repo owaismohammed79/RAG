@@ -95,7 +95,13 @@ export function useChat(jwt, activeConversationId, messages) {
       chatFormData.append("history", JSON.stringify(messages.slice(-10)))
 
       const chatRes = await apiFetch(`/api/prompt/text-file`, { method: "POST", body: chatFormData, signal })
-      if (!chatRes.ok) throw new Error("Chat request failed")
+      if(!chatRes.ok) {
+        if(chatRes.status === 429) {
+          const errData = await chatRes.json();
+          throw new Error(errData.error || "Rate limit exceeded.");
+        }
+        throw new Error("Chat request failed");
+      }
 
       const reader = chatRes.body.getReader()
       const decoder = new TextDecoder()
@@ -151,6 +157,11 @@ export function useChat(jwt, activeConversationId, messages) {
         callbacks.onAuthFailure()
         return
       }
+
+      if (error.message.toLowerCase().includes("rate limit")) {
+        setPromptsRemaining(0);
+      }
+      
       callbacks.onRestoreInput(input, files)
       dispatch(addMessage({ type: "bot", content: `Error: ${error.message}` }))
       setStreamingResponse("")

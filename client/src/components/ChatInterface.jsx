@@ -10,7 +10,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
-import authService from "../appwrite(service)/auth";
+import authService from "../supabase(service)/auth";
 import { login as reduxLogin, logout as reduxLogout } from "../redux/authSlice";
 import ConversationHistory from "./ConversationHistory";
 import ProcessingAnimation from "./ProcessingAnimation";
@@ -41,9 +41,9 @@ export default function ChatInterface() {
       try {
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
-          const token = await authService.getJWT();
-          if (isMounted) {
-            dispatch(reduxLogin({ userData: currentUser, jwt: token.jwt }));
+          const session = await authService.getSession(); 
+          if (isMounted && session) {
+            dispatch(reduxLogin({ userData: currentUser, jwt: session.access_token }));
             localStorage.setItem("userData", JSON.stringify(currentUser));
           }
         } else {
