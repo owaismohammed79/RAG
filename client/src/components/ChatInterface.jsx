@@ -152,12 +152,12 @@ export default function ChatInterface() {
               <div
                 key={index}
                 className={`mb-4 flex ${
-                  message.type === "user" ? "justify-end" : "justify-start"
+                  message.sender_type === "user" ? "justify-end" : "justify-start"
                 }`}
               >
                 <div
                   className={`p-4 rounded-lg max-w-lg ${
-                    message.type === "user" ? "bg-cyan-600" : "bg-gray-700"
+                    message.sender_type === "user" ? "bg-cyan-600" : "bg-gray-700"
                   }`}
                 >
                   <ReactMarkdown

@@ -103,7 +103,7 @@ const convoSlice = createSlice({
             .addCase(fetchMessages.fulfilled, (state, action) => {
                 state.status = 'succeeded';
                 state.messages = action.payload.map(msg => ({
-                    type: msg.senderType,
+                    sender_type: msg.sender_type,
                     content: msg.content
                 }));
             })
@@ -115,7 +115,7 @@ const convoSlice = createSlice({
                 state.status = 'succeeded';
                 //remove the deleted conversation from the state
                 state.conversations = state.conversations.filter(
-                    (convo) => convo.$id !== action.payload
+                    (convo) => convo.id !== action.payload
                 );
                 //if the active conversation was deleted, clear it
                 if (state.activeConversationId === action.payload) {

@@ -97,17 +97,17 @@ const ConversationHistory = () => {
               ></div>
             ))
           : conversations.map((convo) => (
-              <div key={convo.$id} className="relative flex items-center group">
+              <div key={convo.id} className="relative flex items-center group">
                 <Button
                   variant={
-                    activeConversationId === convo.$id ? "secondary" : "ghost"
+                    activeConversationId === convo.id ? "secondary" : "ghost"
                   }
                   className={`w-full justify-start truncate pr-8  ${
-                    activeConversationId === convo.$id
+                    activeConversationId === convo.id
                       ? "text-black"
                       : "text-gray-400"
                   }`}
-                  onClick={() => handleConversationClick(convo.$id)}
+                  onClick={() => handleConversationClick(convo.id)}
                 >
                   {convo.title}
                 </Button>
@@ -137,7 +137,7 @@ const ConversationHistory = () => {
                         Cancel
                       </AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => handleDeleteConversation(convo.$id)}
+                        onClick={() => handleDeleteConversation(convo.id)}
                         className="bg-red-600 text-white hover:bg-red-700"
                       >
                         Delete

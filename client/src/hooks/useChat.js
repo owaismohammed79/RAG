@@ -42,12 +42,12 @@ export function useChat(jwt, activeConversationId, messages) {
 
   const submitChat = async (input, files, callbacks) => {
     if (promptsRemaining !== null && promptsRemaining <= 0) {
-      dispatch(addMessage({ type: "bot", content: "Daily prompt limit reached." }));
+      dispatch(addMessage({ sender_type: "bot", content: "Daily prompt limit reached." }));
       return;
     }
 
     setIsLoading(true);
-    dispatch(addMessage({ type: "user", content: input }));
+    dispatch(addMessage({ sender_type: "user", content: input }));
     callbacks.onClearInput(); 
     setStreamingResponse("");
 
@@ -147,7 +147,7 @@ export function useChat(jwt, activeConversationId, messages) {
         }
       }
 
-      if (finalBotText.trim()) dispatch(addMessage({ type: "bot", content: finalBotText }))
+      if (finalBotText.trim()) dispatch(addMessage({ sender_type: "bot", content: finalBotText }))
       setStreamingResponse("")
 
     } catch (error) {
@@ -163,7 +163,7 @@ export function useChat(jwt, activeConversationId, messages) {
       }
       
       callbacks.onRestoreInput(input, files)
-      dispatch(addMessage({ type: "bot", content: `Error: ${error.message}` }))
+      dispatch(addMessage({ sender_type: "bot", content: `Error: ${error.message}` }))
       setStreamingResponse("")
     } finally {
       setIsLoading(false)
